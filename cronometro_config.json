@@ -1,0 +1,11 @@
+{
+    "largura": 280,
+    "altura": 80,
+    "tamanho_fonte": 16,
+    "fonte_familia": "Moderna",
+    "cor_texto": "#FFFFFF",
+    "tipo_fundo": "transparente",
+    "transparencia": 1.0,
+    "pos_x": -82,
+    "pos_y": 1006
+}
