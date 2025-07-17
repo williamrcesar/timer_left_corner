@@ -97,9 +97,12 @@ class CronometroPremium:
                 break
 
     def aplicar_fundo(self):
+        # Define a unique, unlikely-to-be-used color for transparency
+        TRANSPARENT_KEY_COLOR = '#00FF01' # A very specific green
+
         if self.config["tipo_fundo"] == "transparente":
-            self.root.configure(bg='black')
-            self.root.wm_attributes('-transparentcolor', 'black')
+            self.root.configure(bg=TRANSPARENT_KEY_COLOR) # Set root background to the key color
+            self.root.wm_attributes('-transparentcolor', TRANSPARENT_KEY_COLOR)
             self.root.wm_attributes('-alpha', self.config["transparencia"])
         else:
             cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
@@ -108,7 +111,9 @@ class CronometroPremium:
             self.root.wm_attributes('-alpha', 1.0)
 
     def setup_ui(self):
-        bg = 'black' if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_personalizada", "#1a1a1a")
+        # Use the same unique key color for the canvas background when transparent
+        TRANSPARENT_KEY_COLOR = '#00FF01'
+        bg = TRANSPARENT_KEY_COLOR if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_personalizada", "#1a1a1a")
         if hasattr(self, 'canvas') and self.canvas.winfo_exists():
             self.canvas.destroy()
     
@@ -127,21 +132,25 @@ class CronometroPremium:
         """Aplica forma personalizada ao fundo quando não é transparente"""
         if self.config["tipo_fundo"] == "transparente":
             return
-    
+
         def desenhar_fundo():
             if not self.canvas.winfo_exists():
                 return
-        
+    
             w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
             if w <= 1 or h <= 1:
+                self.canvas.after(50, desenhar_fundo)  # Tenta novamente
                 return
-        
-            # Limpar fundo anterior
-            self.canvas.delete("fundo")
-        
+    
+            # Limpar canvas completamente
+            self.canvas.delete("all")
+    
             forma = self.config.get("forma_caixa", "retangulo")
             cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
-        
+    
+            # Aplicar cor de fundo do canvas
+            self.canvas.configure(bg=cor_fundo)
+    
             if self.config.get("gradiente_ativo", False):
                 self.desenhar_gradiente(w, h)
             elif forma == "retangulo":
@@ -151,66 +160,48 @@ class CronometroPremium:
                 else:
                     self.canvas.create_rectangle(0, 0, w, h, fill=cor_fundo, outline="", tags="fundo")
             elif forma == "oval":
-                self.canvas.create_oval(5, 5, w-5, h-5, fill=cor_fundo, outline="", tags="fundo")
+                self.canvas.create_oval(0, 0, w, h, fill=cor_fundo, outline="", tags="fundo")
             elif forma == "losango":
-                self.canvas.create_polygon(w//2, 5, w-5, h//2, w//2, h-5, 5, h//2, 
+                self.canvas.create_polygon(w//2, 0, w, h//2, w//2, h, 0, h//2, 
                                          fill=cor_fundo, outline="", tags="fundo")
             elif forma == "hexagono":
                 self.desenhar_hexagono(w, h, cor_fundo)
     
+            # Redesenhar o texto por cima
+            self.redesenhar_texto()
+
         self.canvas.after(10, desenhar_fundo)
 
     def desenhar_retangulo_arredondado(self, w, h, raio, cor):
-        """Desenha um retângulo com bordas arredondadas"""
-        points = []
-        # Canto superior esquerdo
-        for i in range(raio):
-            x = raio - (raio * (1 - (i/raio)**0.5))
-            points.extend([x, raio - (raio * (1 - ((raio-i)/raio)**0.5))])
-    
-        # Linha superior
-        points.extend([raio, 0, w-raio, 0])
-    
-        # Canto superior direito
-        for i in range(raio):
-            x = w - raio + (raio * (1 - ((raio-i)/raio)**0.5))
-            y = raio - (raio * (1 - (i/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha direita
-        points.extend([w, raio, w, h-raio])
-    
-        # Canto inferior direito
-        for i in range(raio):
-            x = w - raio + (raio * (1 - (i/raio)**0.5))
-            y = h - raio + (raio * (1 - ((raio-i)/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha inferior
-        points.extend([w-raio, h, raio, h])
-    
-        # Canto inferior esquerdo
-        for i in range(raio):
-            x = raio - (raio * (1 - ((raio-i)/raio)**0.5))
-            y = h - raio + (raio * (1 - (i/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha esquerda
-        points.extend([0, h-raio, 0, raio])
-    
-        if len(points) >= 6:
-            self.canvas.create_polygon(points, fill=cor, outline="", smooth=True, tags="fundo")
+        """Desenha um retângulo com bordas arredondadas de forma mais robusta"""
+        raio = min(raio, w/2, h/2) # Limitar o raio para não exceder as dimensões
+        
+        points = [
+            raio, 0,
+            w - raio, 0,
+            w, raio,
+            w, h - raio,
+            w - raio, h,
+            raio, h,
+            0, h - raio,
+            0, raio
+        ]
+        self.canvas.create_polygon(points, fill=cor, outline="", smooth=True, tags="fundo")
+
 
     def desenhar_hexagono(self, w, h, cor):
         """Desenha um hexágono"""
         cx, cy = w//2, h//2
-        size = min(w, h) // 3
-        points = []
-        for i in range(6):
-            angle = i * 60 * 3.14159 / 180
-            x = cx + size * (angle**0.5 if i % 2 == 0 else 1) * (1 if i < 3 else -1)
-            y = cy + size * (1 if i % 2 == 0 else angle**0.5) * (1 if 1 <= i <= 4 else -1)
-            points.extend([x, y])
+        size_x = w//3
+        size_y = h//3
+        points = [
+            cx, cy-size_y,           # topo
+            cx+size_x, cy-size_y//2, # direita superior
+            cx+size_x, cy+size_y//2, # direita inferior
+            cx, cy+size_y,           # baixo
+            cx-size_x, cy+size_y//2, # esquerda inferior
+            cx-size_x, cy-size_y//2  # esquerda superior
+        ]
         self.canvas.create_polygon(points, fill=cor, outline="", tags="fundo")
 
     def desenhar_gradiente(self, w, h):
@@ -226,8 +217,13 @@ class CronometroPremium:
         def rgb_to_hex(rgb):
             return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
     
-        rgb_inicio = hex_to_rgb(cor_inicio)
-        rgb_fim = hex_to_rgb(cor_fim)
+        try:
+            rgb_inicio = hex_to_rgb(cor_inicio)
+            rgb_fim = hex_to_rgb(cor_fim)
+        except:
+            # Fallback para cores padrão se houver erro
+            rgb_inicio = (26, 26, 26)
+            rgb_fim = (58, 58, 58)
     
         # Criar gradiente vertical
         for i in range(h):
@@ -289,16 +285,14 @@ class CronometroPremium:
         if not self.canvas.winfo_exists():
             return
         w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
+        
+        # Só limpa o texto, não o fundo
+        self.canvas.delete("texto")
+        
         img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         font = self.obter_fonte_pillow()
-        espacamento = self.config["espacamento_letras"]
         
-        if espacamento > 0:
-            texto_com_espaco = ' '.join(txt[i:i+1] for i in range(len(txt))).replace(' ', ' ' * espacamento)
-        else:
-            texto_com_espaco = txt
-            
         cor_b = self.config["cor_borda"]
         cor_p = self.config["cor_preenchimento"]
         stroke = self.config["espessura_borda"]
@@ -313,11 +307,11 @@ class CronometroPremium:
             except:
                 pass
         
-        draw.text((w/2, h/2), texto_com_espaco, font=font, fill=cor_p,
-                  stroke_width=stroke, stroke_fill=cor_b, anchor="mm")
+        # CORRIGIDO: Removido o hack de espaçamento que poderia afetar a resolução
+        draw.text((w/2, h/2), txt, font=font, fill=cor_p,
+                  stroke_width=int(stroke), stroke_fill=cor_b, anchor="mm") # stroke_width deve ser int
         self._photo = ImageTk.PhotoImage(img)
-        self.canvas.delete("all")
-        self.canvas.create_image(0, 0, image=self._photo, anchor="nw")
+        self.canvas.create_image(0, 0, image=self._photo, anchor="nw", tags="texto")
 
     def redesenhar_texto(self):
         self.desenhar_texto(self.tempo_atual_texto)
@@ -345,10 +339,16 @@ class CronometroPremium:
         
         m.add_separator()
         m.add_command(label="⚙️ Configurações", command=self.abrir_configuracoes)
+        m.add_command(label="🔧 Config Simples", command=self.criar_configuracoes_simples)  # Opção alternativa
+        m.add_command(label="🐛 Debug Config", command=self.debug_janela_config)  # Para debug
         m.add_command(label="💾 Salvar Config", command=self.salvar_configuracoes)
         m.add_separator()
         m.add_command(label="❌ Sair", command=self.fechar_app)
-        m.tk_popup(event.x_root, event.y_root)
+        
+        try:
+            m.tk_popup(event.x_root, event.y_root)
+        except Exception as e:
+            print(f"Erro ao mostrar menu: {e}")
 
     def copiar_tempo(self):
         """Copia o tempo atual para a área de transferência"""
@@ -402,46 +402,191 @@ class CronometroPremium:
         pass
 
     def abrir_configuracoes(self):
-        if self.config_window and self.config_window.winfo_exists():
-            self.config_window.lift()
-            self.config_window.focus_force()
-            return
-        self.criar_janela_configuracoes()
+        try:
+            # Força o fechamento da janela anterior se existir
+            if hasattr(self, 'config_window') and self.config_window:
+                try:
+                    if self.config_window.winfo_exists():
+                        self.config_window.destroy()
+                except:
+                    pass
+                self.config_window = None
+        
+            # Pequena pausa para garantir que a janela anterior foi fechada
+            self.root.after(50, self._criar_configuracoes_delayed)
+        
+        except Exception as e:
+            print(f"Erro ao abrir configurações: {e}")
+            # Força criação mesmo com erro
+            self.root.after(100, self._criar_configuracoes_delayed)
+
+    def _criar_configuracoes_delayed(self):
+        """Cria a janela de configurações com delay para evitar problemas de timing"""
+        try:
+            self.config_window = None
+            self.criar_janela_configuracoes()
+        except Exception as e:
+            print(f"Erro ao criar janela de configurações: {e}")
 
     def criar_janela_configuracoes(self):
-        self.config_window = tk.Toplevel(self.root)
-        self.config_window.title("Configurações Avançadas")
-        self.config_window.configure(bg='#1e2227')
-        self.config_window.attributes('-topmost', True)
-        self.config_window.state('zoomed')
+        try:
+            # Cria nova janela
+            self.config_window = tk.Toplevel(self.root)
+            self.config_window.title("Configurações Avançadas")
+            self.config_window.configure(bg='#1e2227')
+    
+            # Configurações de janela mais robustas
+            self.config_window.transient(self.root)  # Faz a janela ser filha da principal
+            self.config_window.grab_set()  # Torna modal
+    
+            # Define tamanho fixo e centraliza
+            width = 950
+            height = 800  # AUMENTADO de 700 para 800 para melhor visualização das dimensões
+            screen_width = self.config_window.winfo_screenwidth()
+            screen_height = self.config_window.winfo_screenheight()
+            x = (screen_width - width) // 2
+            y = (screen_height - height) // 2
+            self.config_window.geometry(f'{width}x{height}+{x}+{y}')
+        
+            # Força a janela a aparecer
+            self.config_window.lift()
+            self.config_window.attributes('-topmost', True)
+            self.config_window.focus_force()
+        
+            # Impede redimensionamento
+            self.config_window.resizable(False, False)
+    
+            # Protocolo de fechamento
+            self.config_window.protocol("WM_DELETE_WINDOW", self.fechar_configuracoes)
+    
+            # Notebook para abas
+            notebook = ttk.Notebook(self.config_window)
+            notebook.pack(fill='both', expand=True, padx=10, pady=10)
 
-        # Notebook para abas
-        notebook = ttk.Notebook(self.config_window)
-        notebook.pack(fill='both', expand=True, padx=10, pady=10)
+            # Aba 1: Aparência
+            aba_aparencia = tk.Frame(notebook, bg='#1e2227')
+            notebook.add(aba_aparencia, text="🎨 Aparência")
+            self.criar_aba_aparencia(aba_aparencia)
 
-        # Aba 1: Aparência
-        aba_aparencia = tk.Frame(notebook, bg='#1e2227')
-        notebook.add(aba_aparencia, text="🎨 Aparência")
-        self.criar_aba_aparencia(aba_aparencia)
+            # Aba 2: Comportamento
+            aba_comportamento = tk.Frame(notebook, bg='#1e2227')
+            notebook.add(aba_comportamento, text="⚙️ Comportamento")
+            self.criar_aba_comportamento(aba_comportamento)
 
-        # Aba 2: Comportamento
-        aba_comportamento = tk.Frame(notebook, bg='#1e2227')
-        notebook.add(aba_comportamento, text="⚙️ Comportamento")
-        self.criar_aba_comportamento(aba_comportamento)
+            # Aba 3: Avançado
+            aba_avancado = tk.Frame(notebook, bg='#1e2227')
+            notebook.add(aba_avancado, text="🔧 Avançado")
+            self.criar_aba_avancado(aba_avancado)
+    
+            # Força atualização final
+            self.config_window.update()
+            self.config_window.deiconify()  # Garante que a janela seja mostrada
+    
+            print("Janela de configurações criada com sucesso")
+    
+        except Exception as e:
+            print(f"Erro crítico ao criar configurações: {e}")
+            # Tenta criar uma versão simplificada
+            self.criar_configuracoes_simples()
 
-        # Aba 3: Avançado
-        aba_avancado = tk.Frame(notebook, bg='#1e2227')
-        notebook.add(aba_avancado, text="🔧 Avançado")
-        self.criar_aba_avancado(aba_avancado)
+    def fechar_configuracoes(self):
+        """Fecha a janela de configurações de forma segura"""
+        try:
+            if hasattr(self, 'config_window') and self.config_window:
+                self.config_window.grab_release()  # Remove o grab modal
+                self.config_window.destroy()
+                self.config_window = None
+        except:
+            pass
+
+    def criar_configuracoes_simples(self):
+        """Versão simplificada das configurações em caso de erro"""
+        try:
+            self.config_window = tk.Toplevel(self.root)
+            self.config_window.title("Configurações (Modo Simples)")
+            self.config_window.configure(bg='#1e2227')
+            self.config_window.geometry("400x300")
+            self.config_window.attributes('-topmost', True)
+            self.config_window.lift()
+            self.config_window.focus_force()
+        
+            # Controles básicos
+            frame = tk.Frame(self.config_window, bg='#1e2227')
+            frame.pack(fill='both', expand=True, padx=20, pady=20)
+        
+            tk.Label(frame, text="Configurações Básicas", fg='white', bg='#1e2227', 
+                    font=('Segoe UI', 14, 'bold')).pack(pady=10)
+        
+            # Botões essenciais
+            tk.Button(frame, text="📍 Centralizar", bg='#238636', fg='white', bd=0, pady=8,
+                      command=self.centralizar).pack(fill='x', pady=5)
+        
+            tk.Button(frame, text="🔄 Resetar", bg='#dc3545', fg='white', bd=0, pady=8,
+                      command=self.resetar).pack(fill='x', pady=5)
+        
+            tk.Button(frame, text="💾 Salvar Config", bg='#0d6efd', fg='white', bd=0, pady=8,
+                      command=self.salvar_configuracoes).pack(fill='x', pady=5)
+        
+            tk.Button(frame, text="❌ Fechar", bg='#6c757d', fg='white', bd=0, pady=8,
+                      command=self.fechar_configuracoes).pack(fill='x', pady=5)
+        
+            print("Configurações simples criadas")
+        
+        except Exception as e:
+            print(f"Erro mesmo na versão simples: {e}")
+
+    def debug_janela_config(self):
+        """Método para debug da janela de configurações"""
+        try:
+            if hasattr(self, 'config_window'):
+                if self.config_window is None:
+                    print("config_window é None")
+                else:
+                    try:
+                        exists = self.config_window.winfo_exists()
+                        print(f"config_window existe: {exists}")
+                        if exists:
+                            print(f"Estado da janela: {self.config_window.state()}")
+                            print(f"Posição: {self.config_window.winfo_x()}, {self.config_window.winfo_y()}")
+                    except Exception as e:
+                        print(f"Erro ao verificar janela: {e}")
+            else:
+                print("config_window não existe como atributo")
+        except Exception as e:
+            print(f"Erro no debug: {e}")
 
     def criar_aba_aparencia(self, parent):
-        container = tk.Frame(parent, bg='#1e2227')
-        container.pack(fill='both', expand=True, padx=15, pady=15)
+        # Adicionar scrollbar para acessar todas as seções
+        main_frame = tk.Frame(parent, bg='#1e2227')
+        main_frame.pack(fill='both', expand=True)
+        
+        # Canvas com scrollbar
+        canvas = tk.Canvas(main_frame, bg='#1e2227', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='#1e2227')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind mouse wheel
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        container = scrollable_frame
 
-        # Seção de Fontes (código existente adaptado)
+        # Seção de Fontes
         font_lb = tk.LabelFrame(container, text="🔤 Fonte e Texto", font=('Segoe UI', 11, 'bold'),
                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        font_lb.pack(fill='x', pady=10)
+        font_lb.pack(fill='x', pady=10, padx=15)
 
         # Família da fonte
         tk.Label(font_lb, text="Família:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
@@ -487,10 +632,10 @@ class CronometroPremium:
                       command=self.toggle_milissegundos, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').grid(row=4, column=0, columnspan=2, sticky='w', padx=10, pady=5)
 
-        # Seção de Cores (código existente adaptado)
+        # Seção de Cores
         cor_lb = tk.LabelFrame(container, text="🎨 Cores e Transparência", font=('Segoe UI', 11, 'bold'),
                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        cor_lb.pack(fill='x', pady=10)
+        cor_lb.pack(fill='x', pady=10, padx=15)
 
         # Tipo de fundo
         tk.Label(cor_lb, text="Tipo de Fundo:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
@@ -503,7 +648,7 @@ class CronometroPremium:
         if self.config["tipo_fundo"] == "transparente":
             self.trans_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
             tk.Label(self.trans_frame, text="Transparência:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
-            self.scl_trans = ttk.Scale(self.trans_frame, from_=0.3, to=1.0, value=self.config["transparencia"],
+            self.scl_trans = ttk.Scale(self.trans_frame, from_=0.0, to=1.0, value=self.config["transparencia"], # CORRIGIDO: from_=0.0
                                        orient='horizontal', command=lambda v: self.mudar_trans(float(v)))
             self.scl_trans.pack(fill='x', expand=True)
 
@@ -520,20 +665,20 @@ class CronometroPremium:
 
         # Espessura da borda
         tk.Label(cor_lb, text="Espessura da borda:", fg='#c9d1d9', bg='#1e2227').grid(row=4, column=0, sticky='w', padx=10, pady=5)
-        self.scl_borda = ttk.Scale(cor_lb, from_=0, to=10, value=self.config["espessura_borda"],
+        self.scl_borda = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espessura_borda"], # CORRIGIDO: from_=0.0, to=20.0
                                    orient='horizontal', command=lambda v: self.mudar_borda(v))
         self.scl_borda.grid(row=4, column=1, sticky='ew', padx=10, pady=5)
 
         # Espaçamento
         tk.Label(cor_lb, text="Espaçamento:", fg='#c9d1d9', bg='#1e2227').grid(row=5, column=0, sticky='w', padx=10, pady=5)
-        self.scl_espacamento = ttk.Scale(cor_lb, from_=0, to=10, value=self.config["espacamento_letras"],
+        self.scl_espacamento = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espacamento_letras"], # CORRIGIDO: from_=0.0, to=20.0
                                          orient='horizontal', command=lambda v: self.mudar_espacamento(v))
         self.scl_espacamento.grid(row=5, column=1, sticky='ew', padx=10, pady=5)
 
         # Seção de Fundo e Forma
         fundo_lb = tk.LabelFrame(container, text="🎭 Fundo e Forma", font=('Segoe UI', 11, 'bold'),
                                  fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        fundo_lb.pack(fill='x', pady=10)
+        fundo_lb.pack(fill='x', pady=10, padx=15)
 
         # Cor de fundo personalizada
         tk.Label(fundo_lb, text="Cor de Fundo:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
@@ -582,7 +727,7 @@ class CronometroPremium:
         # Seção de Dimensões
         dim_lb = tk.LabelFrame(container, text="📐 Dimensões", font=('Segoe UI', 11, 'bold'),
                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        dim_lb.pack(fill='x', pady=10)
+        dim_lb.pack(fill='x', pady=10, padx=15)
 
         # Largura
         tk.Label(dim_lb, text="Largura:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
@@ -768,15 +913,26 @@ Cronômetro Premium v2.0""")
         else:  # Linux
             subprocess.run(["xdg-open", pasta])
 
+    # Métodos para as novas funcionalidades
+    def atualizar_visual_completo(self):
+        """Força atualização completa da interface visual"""
+        self.aplicar_fundo()
+        self.setup_ui()
+        self.aplicar_forma_personalizada()
+
     # Métodos existentes adaptados
     def escolher_cor(self, chave):
         cor = colorchooser.askcolor(color=self.config[chave])[1]
         if cor:
             self.config[chave] = cor
-            if chave == "cor_fundo_solido" and self.config["tipo_fundo"] != "transparente":
+            if chave == "cor_fundo_personalizada":
                 self.aplicar_fundo()
+                self.aplicar_forma_personalizada()
             elif chave in ["cor_preenchimento", "cor_borda"]:
                 self.redesenhar_texto()
+            elif chave in ["cor_gradiente_inicio", "cor_gradiente_fim"]:
+                if self.config.get("gradiente_ativo", False):
+                    self.aplicar_forma_personalizada()
             self.salvar_configuracoes()
 
     def toggle_transparencia(self):
@@ -817,12 +973,12 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def mudar_borda(self, v):
-        self.config["espessura_borda"] = int(float(v))
+        self.config["espessura_borda"] = float(v) # CORRIGIDO: Removido int()
         self.redesenhar_texto()
         self.salvar_configuracoes()
 
     def mudar_espacamento(self, v):
-        self.config["espacamento_letras"] = int(float(v))
+        self.config["espacamento_letras"] = float(v) # CORRIGIDO: Removido int()
         self.redesenhar_texto()
         self.salvar_configuracoes()
 
@@ -864,11 +1020,18 @@ Cronômetro Premium v2.0""")
     def processar_tecla(self, ev):
         if not self.config.get("atalhos_globais", True):
             return
-        k = ev.keysym.lower()
-        if k == 'space': self.toggle()
-        elif k == 'r': self.resetar()
-        elif k == 'c': self.centralizar()
-        elif k == 's': self.abrir_configuracoes()
+        try:
+            k = ev.keysym.lower()
+            if k == 'space': self.toggle()
+            elif k == 'r': self.resetar()
+            elif k == 'c': self.centralizar()
+            elif k == 's': 
+                print("Tecla S pressionada - abrindo configurações")
+                self.abrir_configuracoes()
+            elif k == 'd':  # Debug
+                self.debug_janela_config()
+        except Exception as e:
+            print(f"Erro ao processar tecla: {e}")
 
     def fechar_app(self):
         self.topmost_thread_running = False
@@ -904,21 +1067,23 @@ Cronômetro Premium v2.0""")
         except KeyboardInterrupt:
             self.fechar_app()
 
-    def toggle_gradiente(self):
-        self.config["gradiente_ativo"] = self.var_gradiente.get()
-        if self.config["gradiente_ativo"]:
-            self.grad_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        else:
-            self.grad_frame.grid_forget()
+    def mudar_forma(self):
+        self.config["forma_caixa"] = self.forma_var.get()
+        if hasattr(self, 'borda_frame'):
+            if self.config["forma_caixa"] == "retangulo":
+                self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+            else:
+                self.borda_frame.grid_forget()
         self.aplicar_forma_personalizada()
         self.salvar_configuracoes()
 
-    def mudar_forma(self):
-        self.config["forma_caixa"] = self.forma_var.get()
-        if self.config["forma_caixa"] == "retangulo":
-            self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        else:
-            self.borda_frame.grid_forget()
+    def toggle_gradiente(self):
+        self.config["gradiente_ativo"] = self.var_gradiente.get()
+        if hasattr(self, 'grad_frame'):
+            if self.config["gradiente_ativo"]:
+                self.grad_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
+            else:
+                self.grad_frame.grid_forget()
         self.aplicar_forma_personalizada()
         self.salvar_configuracoes()
 
@@ -934,7 +1099,7 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def diminuir_largura(self):
-        self.config["largura"] = max(self.config["largura"] - 20, 100)
+        self.config["largura"] = max(self.config["largura"] - 20, 1) # CORRIGIDO: Mínimo para 1
         self.lbl_largura.config(text=str(self.config["largura"]))
         self.atualizar_interface()
         self.salvar_configuracoes()
@@ -946,7 +1111,7 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def diminuir_altura(self):
-        self.config["altura"] = max(self.config["altura"] - 10, 40)
+        self.config["altura"] = max(self.config["altura"] - 10, 1) # CORRIGIDO: Mínimo para 1
         self.lbl_altura.config(text=str(self.config["altura"]))
         self.atualizar_interface()
         self.salvar_configuracoes()
