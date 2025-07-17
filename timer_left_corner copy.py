@@ -28,11 +28,7 @@ class CronometroPremium:
             "formato_tempo": "HH:MM:SS", "mostrar_milissegundos": False,
             "tema": "escuro", "animacao": True, "minimizar_tray": False,
             "atalhos_globais": True, "auto_salvar": True,
-            "intervalo_atualizacao": 100, "cor_fundo_solido": "#1a1a1a",
-            "forma_caixa": "retangulo", "borda_arredondada": 10,
-            "largura_personalizada": True, "altura_personalizada": True,
-            "cor_fundo_personalizada": "#2d2d2d", "gradiente_ativo": False,
-            "cor_gradiente_inicio": "#1a1a1a", "cor_gradiente_fim": "#3a3a3a"
+            "intervalo_atualizacao": 100, "cor_fundo_solido": "#1a1a1a"
         }
         self.carregar_configuracoes()
 
@@ -102,141 +98,21 @@ class CronometroPremium:
             self.root.wm_attributes('-transparentcolor', 'black')
             self.root.wm_attributes('-alpha', self.config["transparencia"])
         else:
-            cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
+            cor_fundo = self.config.get("cor_fundo_solido", "#1a1a1a")
             self.root.configure(bg=cor_fundo)
             self.root.wm_attributes('-transparentcolor', '')
             self.root.wm_attributes('-alpha', 1.0)
 
     def setup_ui(self):
-        bg = 'black' if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_personalizada", "#1a1a1a")
+        bg = 'black' if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_solido", "#1a1a1a")
         if hasattr(self, 'canvas') and self.canvas.winfo_exists():
-            self.canvas.destroy()
-    
-        self.canvas = tk.Canvas(self.root, bg=bg, highlightthickness=0)
-        self.canvas.pack(fill='both', expand=True)
-    
-        # Aplicar forma personalizada se não for transparente
-        if self.config["tipo_fundo"] != "transparente":
-            self.aplicar_forma_personalizada()
-    
-        self.canvas.bind("<Configure>", lambda e: self.redesenhar_texto())
-        self.bind_eventos()
+            self.canvas.config(bg=bg)
+        else:
+            self.canvas = tk.Canvas(self.root, bg=bg, highlightthickness=0)
+            self.canvas.pack(fill='both', expand=True)
+            self.canvas.bind("<Configure>", lambda e: self.redesenhar_texto())
+            self.bind_eventos()
         self.redesenhar_texto()
-
-    def aplicar_forma_personalizada(self):
-        """Aplica forma personalizada ao fundo quando não é transparente"""
-        if self.config["tipo_fundo"] == "transparente":
-            return
-    
-        def desenhar_fundo():
-            if not self.canvas.winfo_exists():
-                return
-        
-            w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
-            if w <= 1 or h <= 1:
-                return
-        
-            # Limpar fundo anterior
-            self.canvas.delete("fundo")
-        
-            forma = self.config.get("forma_caixa", "retangulo")
-            cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
-        
-            if self.config.get("gradiente_ativo", False):
-                self.desenhar_gradiente(w, h)
-            elif forma == "retangulo":
-                raio = self.config.get("borda_arredondada", 10)
-                if raio > 0:
-                    self.desenhar_retangulo_arredondado(w, h, raio, cor_fundo)
-                else:
-                    self.canvas.create_rectangle(0, 0, w, h, fill=cor_fundo, outline="", tags="fundo")
-            elif forma == "oval":
-                self.canvas.create_oval(5, 5, w-5, h-5, fill=cor_fundo, outline="", tags="fundo")
-            elif forma == "losango":
-                self.canvas.create_polygon(w//2, 5, w-5, h//2, w//2, h-5, 5, h//2, 
-                                         fill=cor_fundo, outline="", tags="fundo")
-            elif forma == "hexagono":
-                self.desenhar_hexagono(w, h, cor_fundo)
-    
-        self.canvas.after(10, desenhar_fundo)
-
-    def desenhar_retangulo_arredondado(self, w, h, raio, cor):
-        """Desenha um retângulo com bordas arredondadas"""
-        points = []
-        # Canto superior esquerdo
-        for i in range(raio):
-            x = raio - (raio * (1 - (i/raio)**0.5))
-            points.extend([x, raio - (raio * (1 - ((raio-i)/raio)**0.5))])
-    
-        # Linha superior
-        points.extend([raio, 0, w-raio, 0])
-    
-        # Canto superior direito
-        for i in range(raio):
-            x = w - raio + (raio * (1 - ((raio-i)/raio)**0.5))
-            y = raio - (raio * (1 - (i/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha direita
-        points.extend([w, raio, w, h-raio])
-    
-        # Canto inferior direito
-        for i in range(raio):
-            x = w - raio + (raio * (1 - (i/raio)**0.5))
-            y = h - raio + (raio * (1 - ((raio-i)/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha inferior
-        points.extend([w-raio, h, raio, h])
-    
-        # Canto inferior esquerdo
-        for i in range(raio):
-            x = raio - (raio * (1 - ((raio-i)/raio)**0.5))
-            y = h - raio + (raio * (1 - (i/raio)**0.5))
-            points.extend([x, y])
-    
-        # Linha esquerda
-        points.extend([0, h-raio, 0, raio])
-    
-        if len(points) >= 6:
-            self.canvas.create_polygon(points, fill=cor, outline="", smooth=True, tags="fundo")
-
-    def desenhar_hexagono(self, w, h, cor):
-        """Desenha um hexágono"""
-        cx, cy = w//2, h//2
-        size = min(w, h) // 3
-        points = []
-        for i in range(6):
-            angle = i * 60 * 3.14159 / 180
-            x = cx + size * (angle**0.5 if i % 2 == 0 else 1) * (1 if i < 3 else -1)
-            y = cy + size * (1 if i % 2 == 0 else angle**0.5) * (1 if 1 <= i <= 4 else -1)
-            points.extend([x, y])
-        self.canvas.create_polygon(points, fill=cor, outline="", tags="fundo")
-
-    def desenhar_gradiente(self, w, h):
-        """Desenha um fundo com gradiente"""
-        cor_inicio = self.config.get("cor_gradiente_inicio", "#1a1a1a")
-        cor_fim = self.config.get("cor_gradiente_fim", "#3a3a3a")
-    
-        # Converter cores hex para RGB
-        def hex_to_rgb(hex_color):
-            hex_color = hex_color.lstrip('#')
-            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-    
-        def rgb_to_hex(rgb):
-            return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-    
-        rgb_inicio = hex_to_rgb(cor_inicio)
-        rgb_fim = hex_to_rgb(cor_fim)
-    
-        # Criar gradiente vertical
-        for i in range(h):
-            ratio = i / h if h > 0 else 0
-            r = int(rgb_inicio[0] + (rgb_fim[0] - rgb_inicio[0]) * ratio)
-            g = int(rgb_inicio[1] + (rgb_fim[1] - rgb_inicio[1]) * ratio)
-            b = int(rgb_inicio[2] + (rgb_fim[2] - rgb_inicio[2]) * ratio)
-            cor_linha = rgb_to_hex((r, g, b))
-            self.canvas.create_line(0, i, w, i, fill=cor_linha, tags="fundo")
 
     def bind_eventos(self):
         for w in (self.root, self.canvas):
@@ -530,93 +406,6 @@ class CronometroPremium:
                                          orient='horizontal', command=lambda v: self.mudar_espacamento(v))
         self.scl_espacamento.grid(row=5, column=1, sticky='ew', padx=10, pady=5)
 
-        # Seção de Fundo e Forma
-        fundo_lb = tk.LabelFrame(container, text="🎭 Fundo e Forma", font=('Segoe UI', 11, 'bold'),
-                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        fundo_lb.pack(fill='x', pady=10)
-
-        # Cor de fundo personalizada
-        tk.Label(fundo_lb, text="Cor de Fundo:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
-        self.btn_cor_fundo_pers = tk.Button(fundo_lb, text="Escolher Cor", bg='#21262d', fg='white', bd=0,
-                                            command=lambda: self.escolher_cor("cor_fundo_personalizada"))
-        self.btn_cor_fundo_pers.grid(row=0, column=1, padx=10, pady=5)
-
-        # Gradiente
-        self.var_gradiente = tk.BooleanVar(value=self.config.get("gradiente_ativo", False))
-        tk.Checkbutton(fundo_lb, text="Gradiente", variable=self.var_gradiente, command=self.toggle_gradiente,
-                       fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227').grid(row=0, column=2, padx=10, pady=5)
-
-        # Controles de gradiente
-        self.grad_frame = tk.Frame(fundo_lb, bg='#1e2227')
-        if self.config.get("gradiente_ativo", False):
-            self.grad_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-            tk.Label(self.grad_frame, text="Cor Início:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
-            tk.Button(self.grad_frame, text="Escolher", bg='#21262d', fg='white', bd=0,
-                      command=lambda: self.escolher_cor("cor_gradiente_inicio")).pack(side='left', padx=5)
-            tk.Label(self.grad_frame, text="Cor Fim:", fg='#c9d1d9', bg='#1e2227').pack(side='left', padx=(10,0))
-            tk.Button(self.grad_frame, text="Escolher", bg='#21262d', fg='white', bd=0,
-                      command=lambda: self.escolher_cor("cor_gradiente_fim")).pack(side='left', padx=5)
-
-        # Forma da caixa
-        tk.Label(fundo_lb, text="Forma:", fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
-        forma_frame = tk.Frame(fundo_lb, bg='#1e2227')
-        forma_frame.grid(row=2, column=1, columnspan=2, sticky='ew', padx=10, pady=5)
-
-        self.forma_var = tk.StringVar(value=self.config.get("forma_caixa", "retangulo"))
-        formas = [("Retângulo", "retangulo"), ("Oval", "oval"), ("Losango", "losango"), ("Hexágono", "hexagono")]
-        for i, (nome, valor) in enumerate(formas):
-            tk.Radiobutton(forma_frame, text=nome, variable=self.forma_var, value=valor,
-                          fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227',
-                          command=self.mudar_forma).grid(row=0, column=i, padx=5)
-
-        # Bordas arredondadas (só para retângulo)
-        self.borda_frame = tk.Frame(fundo_lb, bg='#1e2227')
-        if self.config.get("forma_caixa", "retangulo") == "retangulo":
-            self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-            tk.Label(self.borda_frame, text="Bordas Arredondadas:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
-            self.scl_borda_arred = ttk.Scale(self.borda_frame, from_=0, to=50, 
-                                             value=self.config.get("borda_arredondada", 10),
-                                             orient='horizontal', command=lambda v: self.mudar_borda_arredondada(v))
-            self.scl_borda_arred.pack(fill='x', expand=True, padx=10)
-
-        # Seção de Dimensões
-        dim_lb = tk.LabelFrame(container, text="📐 Dimensões", font=('Segoe UI', 11, 'bold'),
-                               fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        dim_lb.pack(fill='x', pady=10)
-
-        # Largura
-        tk.Label(dim_lb, text="Largura:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
-        largura_frame = tk.Frame(dim_lb, bg='#1e2227')
-        largura_frame.grid(row=0, column=1, sticky='ew', padx=10, pady=5)
-        self.lbl_largura = tk.Label(largura_frame, text=str(self.config["largura"]),
-                                   width=4, fg='#58a6ff', bg='#1e2227', font=('Segoe UI', 12, 'bold'))
-        self.lbl_largura.pack(side='left', padx=5)
-        tk.Button(largura_frame, text="−", width=3, bg='#21262d', fg='white', bd=0,
-                  command=self.diminuir_largura).pack(side='left', padx=2)
-        tk.Button(largura_frame, text="+", width=3, bg='#21262d', fg='white', bd=0,
-                  command=self.aumentar_largura).pack(side='left', padx=2)
-
-        # Altura
-        tk.Label(dim_lb, text="Altura:", fg='#c9d1d9', bg='#1e2227').grid(row=1, column=0, sticky='w', padx=10, pady=5)
-        altura_frame = tk.Frame(dim_lb, bg='#1e2227')
-        altura_frame.grid(row=1, column=1, sticky='ew', padx=10, pady=5)
-        self.lbl_altura = tk.Label(altura_frame, text=str(self.config["altura"]),
-                                  width=4, fg='#58a6ff', bg='#1e2227', font=('Segoe UI', 12, 'bold'))
-        self.lbl_altura.pack(side='left', padx=5)
-        tk.Button(altura_frame, text="−", width=3, bg='#21262d', fg='white', bd=0,
-                  command=self.diminuir_altura).pack(side='left', padx=2)
-        tk.Button(altura_frame, text="+", width=3, bg='#21262d', fg='white', bd=0,
-                  command=self.aumentar_altura).pack(side='left', padx=2)
-
-        # Botões de preset
-        preset_frame = tk.Frame(dim_lb, bg='#1e2227')
-        preset_frame.grid(row=2, column=0, columnspan=2, pady=10)
-        tk.Label(preset_frame, text="Presets:", fg='#c9d1d9', bg='#1e2227').pack()
-        presets = [("Pequeno", 200, 60), ("Médio", 280, 80), ("Grande", 400, 120), ("Extra", 600, 150)]
-        for nome, w, h in presets:
-            tk.Button(preset_frame, text=nome, bg='#21262d', fg='white', bd=0, width=8,
-                      command=lambda ww=w, hh=h: self.aplicar_preset_tamanho(ww, hh)).pack(side='left', padx=2)
-
     def criar_aba_comportamento(self, parent):
         container = tk.Frame(parent, bg='#1e2227')
         container.pack(fill='both', expand=True, padx=15, pady=15)
@@ -903,61 +692,6 @@ Cronômetro Premium v2.0""")
             self.root.mainloop()
         except KeyboardInterrupt:
             self.fechar_app()
-
-    def toggle_gradiente(self):
-        self.config["gradiente_ativo"] = self.var_gradiente.get()
-        if self.config["gradiente_ativo"]:
-            self.grad_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        else:
-            self.grad_frame.grid_forget()
-        self.aplicar_forma_personalizada()
-        self.salvar_configuracoes()
-
-    def mudar_forma(self):
-        self.config["forma_caixa"] = self.forma_var.get()
-        if self.config["forma_caixa"] == "retangulo":
-            self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-        else:
-            self.borda_frame.grid_forget()
-        self.aplicar_forma_personalizada()
-        self.salvar_configuracoes()
-
-    def mudar_borda_arredondada(self, v):
-        self.config["borda_arredondada"] = int(float(v))
-        self.aplicar_forma_personalizada()
-        self.salvar_configuracoes()
-
-    def aumentar_largura(self):
-        self.config["largura"] = min(self.config["largura"] + 20, 1000)
-        self.lbl_largura.config(text=str(self.config["largura"]))
-        self.atualizar_interface()
-        self.salvar_configuracoes()
-
-    def diminuir_largura(self):
-        self.config["largura"] = max(self.config["largura"] - 20, 100)
-        self.lbl_largura.config(text=str(self.config["largura"]))
-        self.atualizar_interface()
-        self.salvar_configuracoes()
-
-    def aumentar_altura(self):
-        self.config["altura"] = min(self.config["altura"] + 10, 300)
-        self.lbl_altura.config(text=str(self.config["altura"]))
-        self.atualizar_interface()
-        self.salvar_configuracoes()
-
-    def diminuir_altura(self):
-        self.config["altura"] = max(self.config["altura"] - 10, 40)
-        self.lbl_altura.config(text=str(self.config["altura"]))
-        self.atualizar_interface()
-        self.salvar_configuracoes()
-
-    def aplicar_preset_tamanho(self, largura, altura):
-        self.config["largura"] = largura
-        self.config["altura"] = altura
-        self.lbl_largura.config(text=str(largura))
-        self.lbl_altura.config(text=str(altura))
-        self.atualizar_interface()
-        self.salvar_configuracoes()
 
 if __name__ == "__main__":
     try:
