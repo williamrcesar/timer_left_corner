@@ -98,7 +98,8 @@ class CronometroPremium:
 
     def aplicar_fundo(self):
         # Define a unique, unlikely-to-be-used color for transparency
-        TRANSPARENT_KEY_COLOR = '#00FF01' # A very specific green
+        # CORRIGIDO: Alterado para preto puro para evitar o contorno magenta
+        TRANSPARENT_KEY_COLOR = '#000000' 
 
         if self.config["tipo_fundo"] == "transparente":
             self.root.configure(bg=TRANSPARENT_KEY_COLOR) # Set root background to the key color
@@ -111,13 +112,14 @@ class CronometroPremium:
             self.root.wm_attributes('-alpha', 1.0)
 
     def setup_ui(self):
-        # Use the same unique key color for the canvas background when transparent
-        TRANSPARENT_KEY_COLOR = '#00FF01'
-        bg = TRANSPARENT_KEY_COLOR if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_personalizada", "#1a1a1a")
+        # CORRIGIDO: Canvas background agora usa a nova cor chave de transparência (preto)
+        TRANSPARENT_KEY_COLOR = '#000000' # Pure black
+        bg_canvas = TRANSPARENT_KEY_COLOR if self.config["tipo_fundo"] == "transparente" else self.config.get("cor_fundo_personalizada", "#1a1a1a")
+        
         if hasattr(self, 'canvas') and self.canvas.winfo_exists():
             self.canvas.destroy()
     
-        self.canvas = tk.Canvas(self.root, bg=bg, highlightthickness=0)
+        self.canvas = tk.Canvas(self.root, bg=bg_canvas, highlightthickness=0)
         self.canvas.pack(fill='both', expand=True)
     
         # Aplicar forma personalizada se não for transparente
@@ -147,9 +149,10 @@ class CronometroPremium:
     
             forma = self.config.get("forma_caixa", "retangulo")
             cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
+            # print(f"Desenhando fundo: forma={forma}, cor={cor_fundo}") # Debug print
     
-            # Aplicar cor de fundo do canvas
-            self.canvas.configure(bg=cor_fundo)
+            # Aplicar cor de fundo do canvas (importante para áreas não preenchidas pela forma)
+            self.canvas.configure(bg=cor_fundo) 
     
             if self.config.get("gradiente_ativo", False):
                 self.desenhar_gradiente(w, h)
@@ -297,6 +300,14 @@ class CronometroPremium:
         cor_p = self.config["cor_preenchimento"]
         stroke = self.config["espessura_borda"]
         
+        # CORRIGIDO: Ajusta a cor da borda do texto para evitar o halo magenta quando transparente
+        # Agora, a cor da borda do texto será a mesma do preenchimento quando transparente,
+        # e o anti-aliasing ocorrerá com o fundo preto transparente.
+        if self.config["tipo_fundo"] == "transparente":
+            stroke_fill_color = cor_p 
+        else:
+            stroke_fill_color = cor_b
+        
         # Efeito de animação (pulsação)
         if self.config.get("animacao", True) and self.rodando:
             import math
@@ -307,9 +318,8 @@ class CronometroPremium:
             except:
                 pass
         
-        # CORRIGIDO: Removido o hack de espaçamento que poderia afetar a resolução
         draw.text((w/2, h/2), txt, font=font, fill=cor_p,
-                  stroke_width=int(stroke), stroke_fill=cor_b, anchor="mm") # stroke_width deve ser int
+                  stroke_width=int(stroke), stroke_fill=stroke_fill_color, anchor="mm")
         self._photo = ImageTk.PhotoImage(img)
         self.canvas.create_image(0, 0, image=self._photo, anchor="nw", tags="texto")
 
@@ -544,10 +554,8 @@ class CronometroPremium:
                 else:
                     try:
                         exists = self.config_window.winfo_exists()
-                        print(f"config_window existe: {exists}")
-                        if exists:
-                            print(f"Estado da janela: {self.config_window.state()}")
-                            print(f"Posição: {self.config_window.winfo_x()}, {self.config_window.winfo_y()}")
+                        print(f"Estado da janela: {self.config_window.state()}")
+                        print(f"Posição: {self.config_window.winfo_x()}, {self.config_window.winfo_y()}")
                     except Exception as e:
                         print(f"Erro ao verificar janela: {e}")
             else:
@@ -648,7 +656,7 @@ class CronometroPremium:
         if self.config["tipo_fundo"] == "transparente":
             self.trans_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
             tk.Label(self.trans_frame, text="Transparência:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
-            self.scl_trans = ttk.Scale(self.trans_frame, from_=0.0, to=1.0, value=self.config["transparencia"], # CORRIGIDO: from_=0.0
+            self.scl_trans = ttk.Scale(self.trans_frame, from_=0.0, to=1.0, value=self.config["transparencia"],
                                        orient='horizontal', command=lambda v: self.mudar_trans(float(v)))
             self.scl_trans.pack(fill='x', expand=True)
 
@@ -665,13 +673,13 @@ class CronometroPremium:
 
         # Espessura da borda
         tk.Label(cor_lb, text="Espessura da borda:", fg='#c9d1d9', bg='#1e2227').grid(row=4, column=0, sticky='w', padx=10, pady=5)
-        self.scl_borda = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espessura_borda"], # CORRIGIDO: from_=0.0, to=20.0
+        self.scl_borda = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espessura_borda"],
                                    orient='horizontal', command=lambda v: self.mudar_borda(v))
         self.scl_borda.grid(row=4, column=1, sticky='ew', padx=10, pady=5)
 
         # Espaçamento
         tk.Label(cor_lb, text="Espaçamento:", fg='#c9d1d9', bg='#1e2227').grid(row=5, column=0, sticky='w', padx=10, pady=5)
-        self.scl_espacamento = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espacamento_letras"], # CORRIGIDO: from_=0.0, to=20.0
+        self.scl_espacamento = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espacamento_letras"],
                                          orient='horizontal', command=lambda v: self.mudar_espacamento(v))
         self.scl_espacamento.grid(row=5, column=1, sticky='ew', padx=10, pady=5)
 
@@ -760,7 +768,7 @@ class CronometroPremium:
         presets = [("Pequeno", 200, 60), ("Médio", 280, 80), ("Grande", 400, 120), ("Extra", 600, 150)]
         for nome, w, h in presets:
             tk.Button(preset_frame, text=nome, bg='#21262d', fg='white', bd=0, width=8,
-                      command=lambda ww=w, hh=h: self.aplicar_preset_tamanho(ww, hh)).pack(side='left', padx=2)
+                  command=lambda ww=w, hh=h: self.aplicar_preset_tamanho(ww, hh)).pack(side='left', padx=2)
 
     def criar_aba_comportamento(self, parent):
         container = tk.Frame(parent, bg='#1e2227')
@@ -926,8 +934,8 @@ Cronômetro Premium v2.0""")
         if cor:
             self.config[chave] = cor
             if chave == "cor_fundo_personalizada":
-                self.aplicar_fundo()
-                self.aplicar_forma_personalizada()
+                self.aplicar_fundo() # Atualiza o bg da root e do canvas
+                self.aplicar_forma_personalizada() # Redesenha a forma com a nova cor
             elif chave in ["cor_preenchimento", "cor_borda"]:
                 self.redesenhar_texto()
             elif chave in ["cor_gradiente_inicio", "cor_gradiente_fim"]:
@@ -942,8 +950,8 @@ Cronômetro Premium v2.0""")
         else:
             self.config["tipo_fundo"] = "cor"
             self.trans_frame.grid_forget()
-        self.aplicar_fundo()
-        self.setup_ui()
+        self.aplicar_fundo() # Atualiza o bg da root e do canvas
+        self.setup_ui() # Recria o canvas com o novo bg e chama aplicar_forma_personalizada
         self.salvar_configuracoes()
 
     def mudar_trans(self, v):
@@ -973,12 +981,12 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def mudar_borda(self, v):
-        self.config["espessura_borda"] = float(v) # CORRIGIDO: Removido int()
+        self.config["espessura_borda"] = float(v) 
         self.redesenhar_texto()
         self.salvar_configuracoes()
 
     def mudar_espacamento(self, v):
-        self.config["espacamento_letras"] = float(v) # CORRIGIDO: Removido int()
+        self.config["espacamento_letras"] = float(v) 
         self.redesenhar_texto()
         self.salvar_configuracoes()
 
@@ -1069,12 +1077,13 @@ Cronômetro Premium v2.0""")
 
     def mudar_forma(self):
         self.config["forma_caixa"] = self.forma_var.get()
+        # print(f"Mudar forma para: {self.config['forma_caixa']}") # Debug print
         if hasattr(self, 'borda_frame'):
             if self.config["forma_caixa"] == "retangulo":
                 self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
             else:
                 self.borda_frame.grid_forget()
-        self.aplicar_forma_personalizada()
+        self.aplicar_forma_personalizada() # Chama para redesenhar a forma
         self.salvar_configuracoes()
 
     def toggle_gradiente(self):
@@ -1099,7 +1108,7 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def diminuir_largura(self):
-        self.config["largura"] = max(self.config["largura"] - 20, 1) # CORRIGIDO: Mínimo para 1
+        self.config["largura"] = max(self.config["largura"] - 20, 1) 
         self.lbl_largura.config(text=str(self.config["largura"]))
         self.atualizar_interface()
         self.salvar_configuracoes()
@@ -1111,7 +1120,7 @@ Cronômetro Premium v2.0""")
         self.salvar_configuracoes()
 
     def diminuir_altura(self):
-        self.config["altura"] = max(self.config["altura"] - 10, 1) # CORRIGIDO: Mínimo para 1
+        self.config["altura"] = max(self.config["altura"] - 10, 1) 
         self.lbl_altura.config(text=str(self.config["altura"]))
         self.atualizar_interface()
         self.salvar_configuracoes()
