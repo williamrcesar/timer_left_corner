@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import threading, time, json, os, sys
 import subprocess
 import platform
+import os
+from dotenv import load_dotenv
 
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageTk
@@ -47,6 +49,52 @@ class CronometroPremium:
         self.setup_janela()
         self.setup_ui()
         self.iniciar_threads()
+        
+    def abrir_url_no_chrome(self):
+        """
+        Carrega as configurações de um arquivo .env e abre uma URL específica
+        em um perfil do Google Chrome.
+        """
+        try:
+            # Carrega as variáveis do .env
+            load_dotenv()
+
+            chrome_path = os.getenv("CHROME_PATH")
+            profile_name = os.getenv("CHROME_PROFILE")
+            url = os.getenv("TARGET_URL")
+
+            # Verifica se as variáveis foram carregadas
+            if not all([chrome_path, profile_name, url]):
+                messagebox.showerror(
+                    "Erro de Configuração",
+                    "Verifique se o arquivo .env existe e contém as variáveis "
+                    "CHROME_PATH, CHROME_PROFILE e TARGET_URL."
+                )
+                return
+            
+            # Verifica se o caminho do Chrome existe
+            if not os.path.exists(chrome_path):
+                 messagebox.showerror(
+                    "Erro de Caminho",
+                    f"O caminho para o Chrome não foi encontrado:\n{chrome_path}\n"
+                    "Verifique a variável CHROME_PATH no arquivo .env."
+                )
+                 return
+
+            # Comando para abrir o Chrome com o perfil e a URL
+            subprocess.Popen([
+                chrome_path,
+                f"--profile-directory={profile_name}",
+                url
+            ])
+        except NameError:
+             messagebox.showerror(
+                "Erro de Dependência",
+                "A biblioteca 'python-dotenv' não foi encontrada.\n"
+                "Por favor, instale-a com: pip install python-dotenv"
+            )
+        except Exception as e:
+            messagebox.showerror("Erro Inesperado", f"Ocorreu um erro ao tentar abrir o Chrome: {e}")
 
     def carregar_configuracoes(self):
         if os.path.exists(self.config_file):
@@ -327,31 +375,34 @@ class CronometroPremium:
         self.desenhar_texto(self.tempo_atual_texto)
 
     def mostrar_menu_contexto(self, event):
-        m = tk.Menu(self.root, tearoff=0, bg='#2d2d2d', fg='white')
+        cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
+        m = tk.Menu(self.root, tearoff=0, bg=cor_fundo, fg='white')
         label = "⏸️ Pausar" if self.rodando else ("▶️ Continuar" if self.pausado else "▶️ Iniciar")
         m.add_command(label=label, command=self.toggle)
         m.add_command(label="🔄 Resetar", command=self.resetar)
         m.add_separator()
-        
+        m.add_command(label="🔗 Abrir Planilha", command=self.abrir_url_no_chrome)
+        m.add_separator()
         # Submenu de tempo
-        tempo_menu = tk.Menu(m, tearoff=0, bg='#2d2d2d', fg='white')
+        tempo_menu = tk.Menu(m, tearoff=0, bg=cor_fundo, fg='white')
         tempo_menu.add_command(label="📋 Copiar Tempo", command=self.copiar_tempo)
         tempo_menu.add_command(label="⏰ Definir Tempo", command=self.definir_tempo)
         m.add_cascade(label="⏱️ Tempo", menu=tempo_menu)
         
         # Submenu de visibilidade
-        vis_menu = tk.Menu(m, tearoff=0, bg='#2d2d2d', fg='white')
+        vis_menu = tk.Menu(m, tearoff=0, bg=cor_fundo, fg='white')
         vis_text = "❌ Desativar Sempre Visível" if self.config.get("sempre_visivel") else "✅ Ativar Sempre Visível"
         vis_menu.add_command(label=vis_text, command=self.toggle_sempre_visivel)
         vis_menu.add_command(label="📍 Centralizar", command=self.centralizar)
         vis_menu.add_command(label="🔒 Bloquear Posição", command=self.toggle_bloqueio)
-        m.add_cascade(label="👁️ Visibilidade", menu=vis_menu)
+        # m.add_cascade(label="👁️ Visibilidade", menu=vis_menu)
         
         m.add_separator()
         m.add_command(label="⚙️ Configurações", command=self.abrir_configuracoes)
-        m.add_command(label="🔧 Config Simples", command=self.criar_configuracoes_simples)  # Opção alternativa
-        m.add_command(label="🐛 Debug Config", command=self.debug_janela_config)  # Para debug
-        m.add_command(label="💾 Salvar Config", command=self.salvar_configuracoes)
+        # m.add_command(label="🔧 Config Simples", command=self.criar_configuracoes_simples)  # Opção alternativa
+        # m.add_command(label="🐛 Debug Config", command=self.debug_janela_config)  # Para debug
+        # m.add_command(label="💾 Salvar Config", command=self.salvar_configuracoes)
+
         m.add_separator()
         m.add_command(label="❌ Sair", command=self.fechar_app)
         
