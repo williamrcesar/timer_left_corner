@@ -11,7 +11,7 @@
     <!-- Coluna 1 -->
     <td align="center">
       <strong>Menu</strong><br><br>
-      <img width="403" alt="GIF da funcionalidade X" src="https://github.com/user-attachments/assets/5e8a39c4-e00b-4aac-af5f-5bcf1436db9f"  />
+      <img width="403" alt="GIF da funcionalidade X" src="https://github.com/user-attachments/assets/5e68be5a-19cb-415f-b0ce-0d941309be39"  />
     </td>
     <!-- Coluna 2 -->
     <td align="center">
