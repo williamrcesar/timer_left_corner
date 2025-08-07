@@ -21,4 +21,8 @@
   </tr>
 </table>
 
+<p align="center">
+  <img width="100%" alt="Banner do projeto" src="https://github.com/user-attachments/assets/3c6eb4d2-c35c-42a0-acd3-b582b00ecd67" />
+</p>
+
 
