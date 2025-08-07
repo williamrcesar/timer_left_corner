@@ -96,6 +96,52 @@ class CronometroPremium:
         except Exception as e:
             messagebox.showerror("Erro Inesperado", f"Ocorreu um erro ao tentar abrir o Chrome: {e}")
 
+    def abrir_url_no_chrome_github(self):
+        """
+        Carrega as configurações de um arquivo .env e abre uma URL específica
+        em um perfil do Google Chrome.
+        """
+        try:
+            # Carrega as variáveis do .env
+            load_dotenv()
+
+            chrome_path = os.getenv("CHROME_PATH")
+            profile_name = os.getenv("CHROME_PROFILE_GITHUB")
+            url = os.getenv("TARGET_URL_GITHUB")
+
+            # Verifica se as variáveis foram carregadas
+            if not all([chrome_path, profile_name, url]):
+                messagebox.showerror(
+                    "Erro de Configuração",
+                    "Verifique se o arquivo .env existe e contém as variáveis "
+                    "CHROME_PATH, CHROME_PROFILE e TARGET_URL."
+                )
+                return
+            
+            # Verifica se o caminho do Chrome existe
+            if not os.path.exists(chrome_path):
+                 messagebox.showerror(
+                    "Erro de Caminho",
+                    f"O caminho para o Chrome não foi encontrado:\n{chrome_path}\n"
+                    "Verifique a variável CHROME_PATH no arquivo .env."
+                )
+                 return
+
+            # Comando para abrir o Chrome com o perfil e a URL
+            subprocess.Popen([
+                chrome_path,
+                f"--profile-directory={profile_name}",
+                url
+            ])
+        except NameError:
+             messagebox.showerror(
+                "Erro de Dependência",
+                "A biblioteca 'python-dotenv' não foi encontrada.\n"
+                "Por favor, instale-a com: pip install python-dotenv"
+            )
+        except Exception as e:
+            messagebox.showerror("Erro Inesperado", f"Ocorreu um erro ao tentar abrir o Chrome: {e}")
+
     def carregar_configuracoes(self):
         if os.path.exists(self.config_file):
             try:
@@ -382,6 +428,7 @@ class CronometroPremium:
         m.add_command(label="🔄 Resetar", command=self.resetar)
         m.add_separator()
         m.add_command(label="🔗 Abrir Planilha", command=self.abrir_url_no_chrome)
+        m.add_command(label="🐙 GitHub Projetos", command=self.abrir_url_no_chrome_github)
         m.add_separator()
         # Submenu de tempo
         tempo_menu = tk.Menu(m, tearoff=0, bg=cor_fundo, fg='white')
