@@ -6,19 +6,6 @@ import subprocess
 import platform
 from dotenv import load_dotenv
 
-# Dependências adicionais
-try:
-    from playsound import playsound
-except ImportError:
-    print("A biblioteca playsound é necessária. Instale com: pip install playsound==1.2.2")
-    sys.exit()
-
-try:
-    import screeninfo
-except ImportError:
-    print("A biblioteca screeninfo é necessária. Instale com: pip install screeninfo")
-    sys.exit()
-
 try:
     from PIL import Image, ImageDraw, ImageFont, ImageTk
 except ImportError:
@@ -28,6 +15,7 @@ except ImportError:
 class CronometroPremium:
     def __init__(self):
         self.root = tk.Tk()
+        self.root.title("Cronômetro Premium")
         self.config_file = "cronometro_config.json"
 
         self.config = {
@@ -46,19 +34,13 @@ class CronometroPremium:
             "largura_personalizada": True, "altura_personalizada": True,
             "cor_fundo_personalizada": "#2d2d2d", "gradiente_ativo": False,
             "cor_gradiente_inicio": "#1a1a1a", "cor_gradiente_fim": "#3a3a3a",
+            # ### NOVO: Configurações do Alarme de Foco ###
             "alarm_ativo": False,
             "alarm_tempo_trabalho": 45,
             "alarm_tempo_pausa": 5,
-            "alarm_tipo_bloqueio": "Tela Cheia Translúcida",
-            "language": "pt" # ### NOVO: Configuração de idioma ###
+            "alarm_tipo_bloqueio": "Tela Cheia Translúcida"
         }
         self.carregar_configuracoes()
-
-        # ### NOVO: Carregamento de traduções ###
-        self.translations = {}
-        self.load_translations()
-        
-        self.root.title(self.get_string("app_title"))
 
         self.inicio = None
         self.pausado = False
@@ -68,57 +50,16 @@ class CronometroPremium:
         self.config_window = None
         self.topmost_thread_running = True
 
+        # ### NOVO: Variáveis de estado do Alarme ###
         self.alarm_thread = None
         self.alarm_rodando = False
         self.is_break_time = False
-        self.freeze_windows = []
-        self.countdown_labels = []
-        self.transition_windows = []
-
-        self.alarm_tempo_trabalho_var = tk.IntVar()
-        self.alarm_tempo_pausa_var = tk.IntVar()
-        self.alarm_tempo_trabalho_var.trace_add("write", self.on_alarm_time_change)
-        self.alarm_tempo_pausa_var.trace_add("write", self.on_alarm_time_change)
+        self.freeze_window = None
 
         self.setup_janela()
         self.setup_ui()
         self.iniciar_threads()
-
-    # ### NOVO: Funções de internacionalização (i18n) ###
-    def load_translations(self):
-        lang = self.config.get("language", "pt")
-        try:
-            with open(f"{lang}.json", 'r', encoding='utf-8') as f:
-                self.translations = json.load(f)
-        except FileNotFoundError:
-            print(f"Arquivo de tradução '{lang}.json' não encontrado. Usando fallback.")
-            self.translations = {} # Usa um dicionário vazio como fallback
-        except json.JSONDecodeError:
-            print(f"Erro ao decodificar o arquivo '{lang}.json'.")
-            self.translations = {}
-
-    def get_string(self, key):
-        """Retorna a string traduzida para a chave fornecida."""
-        return self.translations.get(key, key.upper()) # Retorna a chave em maiúsculo se não encontrar
-
-    def change_language(self, event=None):
-        selected_lang_display = self.lang_combo.get()
-        lang_map = {"Português": "pt", "English": "en"}
-        lang_code = lang_map.get(selected_lang_display)
-
-        if lang_code and lang_code != self.config.get("language"):
-            self.config["language"] = lang_code
-            self.salvar_configuracoes()
-            self.load_translations()
-            self.root.title(self.get_string("app_title"))
-            messagebox.showinfo(
-                self.get_string("lang_changed_title"),
-                self.get_string("lang_changed_message")
-            )
-            # Fecha a janela de config para forçar a recriação com o novo idioma
-            self.fechar_configuracoes()
-            self.abrir_configuracoes()
-
+        
     def abrir_url_no_chrome(self):
         """
         Carrega as configurações de um arquivo .env e abre uma URL específica
@@ -489,39 +430,38 @@ class CronometroPremium:
     def redesenhar_texto(self):
         self.desenhar_texto(self.tempo_atual_texto)
 
-    # ### ALTERADO: Todos os textos agora usam get_string ###
     def mostrar_menu_contexto(self, event):
         cor_fundo = self.config.get("cor_fundo_personalizada", "#1a1a1a")
         m = tk.Menu(self.root, tearoff=0, bg=cor_fundo, fg='white')
-        
-        if self.rodando:
-            label = self.get_string("menu_pause")
-        else:
-            label = self.get_string("menu_resume") if self.pausado else self.get_string("menu_start")
-
+        label = "⏸️ Pausar" if self.rodando else ("▶️ Continuar" if self.pausado else "▶️ Iniciar")
         m.add_command(label=label, command=self.toggle)
-        m.add_command(label=self.get_string("menu_reset"), command=self.resetar)
-        
-        if self.config.get("alarm_ativo", False):
-            m.add_separator()
-            alarm_label = self.get_string("menu_stop_focus") if self.alarm_rodando else self.get_string("menu_start_focus")
-            m.add_command(label=alarm_label, command=self.toggle_alarme_foco)
-        
+        m.add_command(label="🔄 Resetar", command=self.resetar)
         m.add_separator()
-        m.add_command(label=self.get_string("menu_open_sheet"), command=self.abrir_url_no_chrome)
-        m.add_command(label=self.get_string("menu_github_projects"), command=self.abrir_url_no_chrome_github)
+        m.add_command(label="🔗 Abrir Planilha", command=self.abrir_url_no_chrome)
+        m.add_command(label="🐙 GitHub Projetos", command=self.abrir_url_no_chrome_github)
         m.add_separator()
-
+        # Submenu de tempo
         tempo_menu = tk.Menu(m, tearoff=0, bg=cor_fundo, fg='white')
-        tempo_menu.add_command(label=self.get_string("menu_copy_time"), command=self.copiar_tempo)
-        tempo_menu.add_command(label=self.get_string("menu_set_time"), command=self.definir_tempo)
-        m.add_cascade(label=self.get_string("menu_time"), menu=tempo_menu)
+        tempo_menu.add_command(label="📋 Copiar Tempo", command=self.copiar_tempo)
+        tempo_menu.add_command(label="⏰ Definir Tempo", command=self.definir_tempo)
+        m.add_cascade(label="⏱️ Tempo", menu=tempo_menu)
+        
+        # Submenu de visibilidade
+        vis_menu = tk.Menu(m, tearoff=0, bg=cor_fundo, fg='white')
+        vis_text = "❌ Desativar Sempre Visível" if self.config.get("sempre_visivel") else "✅ Ativar Sempre Visível"
+        vis_menu.add_command(label=vis_text, command=self.toggle_sempre_visivel)
+        vis_menu.add_command(label="📍 Centralizar", command=self.centralizar)
+        vis_menu.add_command(label="🔒 Bloquear Posição", command=self.toggle_bloqueio)
+        # m.add_cascade(label="👁️ Visibilidade", menu=vis_menu)
         
         m.add_separator()
-        m.add_command(label=self.get_string("menu_settings"), command=self.abrir_configuracoes)
+        m.add_command(label="⚙️ Configurações", command=self.abrir_configuracoes)
+        # m.add_command(label="🔧 Config Simples", command=self.criar_configuracoes_simples)  # Opção alternativa
+        # m.add_command(label="🐛 Debug Config", command=self.debug_janela_config)  # Para debug
+        # m.add_command(label="💾 Salvar Config", command=self.salvar_configuracoes)
 
         m.add_separator()
-        m.add_command(label=self.get_string("menu_exit"), command=self.fechar_app)
+        m.add_command(label="❌ Sair", command=self.fechar_app)
         
         try:
             m.tk_popup(event.x_root, event.y_root)
@@ -610,7 +550,7 @@ class CronometroPremium:
         try:
             # Cria nova janela
             self.config_window = tk.Toplevel(self.root)
-            self.config_window.title(self.get_string("settings_title"))
+            self.config_window.title("Configurações Avançadas")
             self.config_window.configure(bg='#1e2227')
     
             # Configurações de janela mais robustas
@@ -641,27 +581,35 @@ class CronometroPremium:
             notebook = ttk.Notebook(self.config_window)
             notebook.pack(fill='both', expand=True, padx=10, pady=10)
 
+            # Aba 1: Aparência
             aba_aparencia = tk.Frame(notebook, bg='#1e2227')
-            notebook.add(aba_aparencia, text=self.get_string("tab_appearance"))
+            notebook.add(aba_aparencia, text="🎨 Aparência")
             self.criar_aba_aparencia(aba_aparencia)
 
+            # Aba 2: Comportamento
             aba_comportamento = tk.Frame(notebook, bg='#1e2227')
-            notebook.add(aba_comportamento, text=self.get_string("tab_behavior"))
+            notebook.add(aba_comportamento, text="⚙️ Comportamento")
             self.criar_aba_comportamento(aba_comportamento)
 
+            # ### NOVO: Aba de Alarme/Foco ###
             aba_alarme = tk.Frame(notebook, bg='#1e2227')
-            notebook.add(aba_alarme, text=self.get_string("tab_alarm"))
+            notebook.add(aba_alarme, text="⏰ Alarme/Foco")
             self.criar_aba_alarme(aba_alarme)
 
+            # Aba 3: Avançado
             aba_avancado = tk.Frame(notebook, bg='#1e2227')
-            notebook.add(aba_avancado, text=self.get_string("tab_advanced"))
+            notebook.add(aba_avancado, text="🔧 Avançado")
             self.criar_aba_avancado(aba_avancado)
     
+            # Força atualização final
             self.config_window.update()
-            self.config_window.deiconify()
+            self.config_window.deiconify()  # Garante que a janela seja mostrada
+    
+            print("Janela de configurações criada com sucesso")
     
         except Exception as e:
             print(f"Erro crítico ao criar configurações: {e}")
+            # Tenta criar uma versão simplificada
             self.criar_configuracoes_simples()
 
     def fechar_configuracoes(self):
@@ -729,9 +677,11 @@ class CronometroPremium:
             print(f"Erro no debug: {e}")
 
     def criar_aba_aparencia(self, parent):
+        # Adicionar scrollbar para acessar todas as seções
         main_frame = tk.Frame(parent, bg='#1e2227')
         main_frame.pack(fill='both', expand=True)
         
+        # Canvas com scrollbar
         canvas = tk.Canvas(main_frame, bg='#1e2227', highlightthickness=0)
         scrollbar = ttk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg='#1e2227')
@@ -747,17 +697,20 @@ class CronometroPremium:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
+        # Bind mouse wheel
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
         canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
         container = scrollable_frame
 
-        font_lb = tk.LabelFrame(container, text="🔤 " + self.get_string("font_family"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Fontes
+        font_lb = tk.LabelFrame(container, text="🔤 Fonte e Texto", font=('Segoe UI', 11, 'bold'),
                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         font_lb.pack(fill='x', pady=10, padx=15)
 
-        tk.Label(font_lb, text=self.get_string("font_family"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        # Família da fonte
+        tk.Label(font_lb, text="Família:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
         fam_frame = tk.Frame(font_lb, bg='#1e2227')
         fam_frame.grid(row=0, column=1, sticky='ew', padx=10, pady=5)
         fontes = ["Digital", "Windows", "Moderna", "Clássica", "Técnica", "Elegante", "Simples", "Mono", "System", "Impact", "Comic"]
@@ -770,7 +723,8 @@ class CronometroPremium:
                 btn.config(bg='#0d6efd')
             self.fam_vars.append(btn)
 
-        tk.Label(font_lb, text=self.get_string("font_size"), fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
+        # Tamanho da fonte
+        tk.Label(font_lb, text="Tamanho:", fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
         size_frame = tk.Frame(font_lb, bg='#1e2227')
         size_frame.grid(row=2, column=1, sticky='ew', padx=10, pady=5)
         self.lbl_size = tk.Label(size_frame, text=str(self.config["tamanho_fonte"]),
@@ -781,7 +735,8 @@ class CronometroPremium:
         tk.Button(size_frame, text="+", width=3, bg='#21262d', fg='white', bd=0,
                   command=self.aumentar_fonte).pack(side='left', padx=2)
 
-        tk.Label(font_lb, text=self.get_string("time_format"), fg='#c9d1d9', bg='#1e2227').grid(row=3, column=0, sticky='w', padx=10, pady=5)
+        # Formato do tempo
+        tk.Label(font_lb, text="Formato:", fg='#c9d1d9', bg='#1e2227').grid(row=3, column=0, sticky='w', padx=10, pady=5)
         formato_frame = tk.Frame(font_lb, bg='#1e2227')
         formato_frame.grid(row=3, column=1, sticky='ew', padx=10, pady=5)
         
@@ -792,101 +747,111 @@ class CronometroPremium:
                           fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227',
                           command=lambda: self.mudar_formato()).grid(row=0, column=i, padx=10)
 
+        # Milissegundos
         self.var_millis = tk.BooleanVar(value=self.config.get("mostrar_milissegundos", False))
-        tk.Checkbutton(font_lb, text=self.get_string("show_milliseconds"), variable=self.var_millis,
+        tk.Checkbutton(font_lb, text="Mostrar milissegundos", variable=self.var_millis,
                       command=self.toggle_milissegundos, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').grid(row=4, column=0, columnspan=2, sticky='w', padx=10, pady=5)
 
-        cor_lb = tk.LabelFrame(container, text=self.get_string("colors_transparency"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Cores
+        cor_lb = tk.LabelFrame(container, text="🎨 Cores e Transparência", font=('Segoe UI', 11, 'bold'),
                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         cor_lb.pack(fill='x', pady=10, padx=15)
 
-        tk.Label(cor_lb, text=self.get_string("background_type"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        # Tipo de fundo
+        tk.Label(cor_lb, text="Tipo de Fundo:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
         self.var_transparente = tk.BooleanVar(value=self.config["tipo_fundo"] == "transparente")
-        tk.Checkbutton(cor_lb, text=self.get_string("transparent"), variable=self.var_transparente, command=self.toggle_transparencia,
+        tk.Checkbutton(cor_lb, text="Transparente", variable=self.var_transparente, command=self.toggle_transparencia,
                        fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227').grid(row=0, column=1, padx=10, pady=5)
 
+        # Controle de transparência
         self.trans_frame = tk.Frame(cor_lb, bg='#1e2227')
         if self.config["tipo_fundo"] == "transparente":
             self.trans_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-            tk.Label(self.trans_frame, text=self.get_string("transparency"), fg='#c9d1d9', bg='#1e2227').pack(side='left')
+            tk.Label(self.trans_frame, text="Transparência:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
             self.scl_trans = ttk.Scale(self.trans_frame, from_=0.0, to=1.0, value=self.config["transparencia"],
                                        orient='horizontal', command=lambda v: self.mudar_trans(float(v)))
             self.scl_trans.pack(fill='x', expand=True)
 
-        tk.Label(cor_lb, text=self.get_string("text_color"), fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
-        self.btn_cor_preench = tk.Button(cor_lb, text=self.get_string("choose_color"), bg='#21262d', fg='white', bd=0,
+        # Cores
+        tk.Label(cor_lb, text="Cor do Texto:", fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
+        self.btn_cor_preench = tk.Button(cor_lb, text="Escolher", bg='#21262d', fg='white', bd=0,
                                          command=lambda: self.escolher_cor("cor_preenchimento"))
         self.btn_cor_preench.grid(row=2, column=1, padx=10, pady=5)
 
-        tk.Label(cor_lb, text=self.get_string("border_color"), fg='#c9d1d9', bg='#1e2227').grid(row=3, column=0, sticky='w', padx=10, pady=5)
-        self.btn_cor_borda = tk.Button(cor_lb, text=self.get_string("choose_color"), bg='#21262d', fg='white', bd=0,
+        tk.Label(cor_lb, text="Cor da Borda:", fg='#c9d1d9', bg='#1e2227').grid(row=3, column=0, sticky='w', padx=10, pady=5)
+        self.btn_cor_borda = tk.Button(cor_lb, text="Escolher", bg='#21262d', fg='white', bd=0,
                                        command=lambda: self.escolher_cor("cor_borda"))
         self.btn_cor_borda.grid(row=3, column=1, padx=10, pady=5)
 
-        tk.Label(cor_lb, text=self.get_string("border_thickness"), fg='#c9d1d9', bg='#1e2227').grid(row=4, column=0, sticky='w', padx=10, pady=5)
+        # Espessura da borda
+        tk.Label(cor_lb, text="Espessura da borda:", fg='#c9d1d9', bg='#1e2227').grid(row=4, column=0, sticky='w', padx=10, pady=5)
         self.scl_borda = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espessura_borda"],
                                    orient='horizontal', command=lambda v: self.mudar_borda(v))
         self.scl_borda.grid(row=4, column=1, sticky='ew', padx=10, pady=5)
 
-        tk.Label(cor_lb, text=self.get_string("letter_spacing"), fg='#c9d1d9', bg='#1e2227').grid(row=5, column=0, sticky='w', padx=10, pady=5)
+        # Espaçamento
+        tk.Label(cor_lb, text="Espaçamento:", fg='#c9d1d9', bg='#1e2227').grid(row=5, column=0, sticky='w', padx=10, pady=5)
         self.scl_espacamento = ttk.Scale(cor_lb, from_=0.0, to=20.0, value=self.config["espacamento_letras"],
                                          orient='horizontal', command=lambda v: self.mudar_espacamento(v))
         self.scl_espacamento.grid(row=5, column=1, sticky='ew', padx=10, pady=5)
 
-        fundo_lb = tk.LabelFrame(container, text=self.get_string("background_shape"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Fundo e Forma
+        fundo_lb = tk.LabelFrame(container, text="🎭 Fundo e Forma", font=('Segoe UI', 11, 'bold'),
                                  fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         fundo_lb.pack(fill='x', pady=10, padx=15)
 
-        tk.Label(fundo_lb, text=self.get_string("background_color"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
-        self.btn_cor_fundo_pers = tk.Button(fundo_lb, text=self.get_string("choose_color"), bg='#21262d', fg='white', bd=0,
+        # Cor de fundo personalizada
+        tk.Label(fundo_lb, text="Cor de Fundo:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        self.btn_cor_fundo_pers = tk.Button(fundo_lb, text="Escolher Cor", bg='#21262d', fg='white', bd=0,
                                             command=lambda: self.escolher_cor("cor_fundo_personalizada"))
         self.btn_cor_fundo_pers.grid(row=0, column=1, padx=10, pady=5)
 
+        # Gradiente
         self.var_gradiente = tk.BooleanVar(value=self.config.get("gradiente_ativo", False))
-        tk.Checkbutton(fundo_lb, text=self.get_string("gradient"), variable=self.var_gradiente, command=self.toggle_gradiente,
+        tk.Checkbutton(fundo_lb, text="Gradiente", variable=self.var_gradiente, command=self.toggle_gradiente,
                        fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227').grid(row=0, column=2, padx=10, pady=5)
 
+        # Controles de gradiente
         self.grad_frame = tk.Frame(fundo_lb, bg='#1e2227')
         if self.config.get("gradiente_ativo", False):
             self.grad_frame.grid(row=1, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-            tk.Label(self.grad_frame, text=self.get_string("start_color"), fg='#c9d1d9', bg='#1e2227').pack(side='left')
-            tk.Button(self.grad_frame, text=self.get_string("choose_color"), bg='#21262d', fg='white', bd=0,
+            tk.Label(self.grad_frame, text="Cor Início:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
+            tk.Button(self.grad_frame, text="Escolher", bg='#21262d', fg='white', bd=0,
                       command=lambda: self.escolher_cor("cor_gradiente_inicio")).pack(side='left', padx=5)
-            tk.Label(self.grad_frame, text=self.get_string("end_color"), fg='#c9d1d9', bg='#1e2227').pack(side='left', padx=(10,0))
-            tk.Button(self.grad_frame, text=self.get_string("choose_color"), bg='#21262d', fg='white', bd=0,
+            tk.Label(self.grad_frame, text="Cor Fim:", fg='#c9d1d9', bg='#1e2227').pack(side='left', padx=(10,0))
+            tk.Button(self.grad_frame, text="Escolher", bg='#21262d', fg='white', bd=0,
                       command=lambda: self.escolher_cor("cor_gradiente_fim")).pack(side='left', padx=5)
 
-        tk.Label(fundo_lb, text=self.get_string("shape"), fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
+        # Forma da caixa
+        tk.Label(fundo_lb, text="Forma:", fg='#c9d1d9', bg='#1e2227').grid(row=2, column=0, sticky='w', padx=10, pady=5)
         forma_frame = tk.Frame(fundo_lb, bg='#1e2227')
         forma_frame.grid(row=2, column=1, columnspan=2, sticky='ew', padx=10, pady=5)
 
         self.forma_var = tk.StringVar(value=self.config.get("forma_caixa", "retangulo"))
-        formas = [
-            (self.get_string("shape_rectangle"), "retangulo"), 
-            (self.get_string("shape_oval"), "oval"), 
-            (self.get_string("shape_diamond"), "losango"), 
-            (self.get_string("shape_hexagon"), "hexagono")
-        ]
+        formas = [("Retângulo", "retangulo"), ("Oval", "oval"), ("Losango", "losango"), ("Hexágono", "hexagono")]
         for i, (nome, valor) in enumerate(formas):
             tk.Radiobutton(forma_frame, text=nome, variable=self.forma_var, value=valor,
                           fg='#c9d1d9', bg='#1e2227', selectcolor='#1e2227',
                           command=self.mudar_forma).grid(row=0, column=i, padx=5)
 
+        # Bordas arredondadas (só para retângulo)
         self.borda_frame = tk.Frame(fundo_lb, bg='#1e2227')
         if self.config.get("forma_caixa", "retangulo") == "retangulo":
             self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
-            tk.Label(self.borda_frame, text=self.get_string("rounded_corners"), fg='#c9d1d9', bg='#1e2227').pack(side='left')
+            tk.Label(self.borda_frame, text="Bordas Arredondadas:", fg='#c9d1d9', bg='#1e2227').pack(side='left')
             self.scl_borda_arred = ttk.Scale(self.borda_frame, from_=0, to=50, 
                                              value=self.config.get("borda_arredondada", 10),
                                              orient='horizontal', command=lambda v: self.mudar_borda_arredondada(v))
             self.scl_borda_arred.pack(fill='x', expand=True, padx=10)
 
-        dim_lb = tk.LabelFrame(container, text=self.get_string("dimensions"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Dimensões
+        dim_lb = tk.LabelFrame(container, text="📐 Dimensões", font=('Segoe UI', 11, 'bold'),
                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         dim_lb.pack(fill='x', pady=10, padx=15)
 
-        tk.Label(dim_lb, text=self.get_string("width"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        # Largura
+        tk.Label(dim_lb, text="Largura:", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
         largura_frame = tk.Frame(dim_lb, bg='#1e2227')
         largura_frame.grid(row=0, column=1, sticky='ew', padx=10, pady=5)
         self.lbl_largura = tk.Label(largura_frame, text=str(self.config["largura"]),
@@ -897,7 +862,8 @@ class CronometroPremium:
         tk.Button(largura_frame, text="+", width=3, bg='#21262d', fg='white', bd=0,
                   command=self.aumentar_largura).pack(side='left', padx=2)
 
-        tk.Label(dim_lb, text=self.get_string("height"), fg='#c9d1d9', bg='#1e2227').grid(row=1, column=0, sticky='w', padx=10, pady=5)
+        # Altura
+        tk.Label(dim_lb, text="Altura:", fg='#c9d1d9', bg='#1e2227').grid(row=1, column=0, sticky='w', padx=10, pady=5)
         altura_frame = tk.Frame(dim_lb, bg='#1e2227')
         altura_frame.grid(row=1, column=1, sticky='ew', padx=10, pady=5)
         self.lbl_altura = tk.Label(altura_frame, text=str(self.config["altura"]),
@@ -908,15 +874,11 @@ class CronometroPremium:
         tk.Button(altura_frame, text="+", width=3, bg='#21262d', fg='white', bd=0,
                   command=self.aumentar_altura).pack(side='left', padx=2)
 
+        # Botões de preset
         preset_frame = tk.Frame(dim_lb, bg='#1e2227')
         preset_frame.grid(row=2, column=0, columnspan=2, pady=10)
-        tk.Label(preset_frame, text=self.get_string("presets"), fg='#c9d1d9', bg='#1e2227').pack()
-        presets = [
-            (self.get_string("preset_small"), 200, 60), 
-            (self.get_string("preset_medium"), 280, 80), 
-            (self.get_string("preset_large"), 400, 120), 
-            (self.get_string("preset_extra"), 600, 150)
-        ]
+        tk.Label(preset_frame, text="Presets:", fg='#c9d1d9', bg='#1e2227').pack()
+        presets = [("Pequeno", 200, 60), ("Médio", 280, 80), ("Grande", 400, 120), ("Extra", 600, 150)]
         for nome, w, h in presets:
             tk.Button(preset_frame, text=nome, bg='#21262d', fg='white', bd=0, width=8,
                   command=lambda ww=w, hh=h: self.aplicar_preset_tamanho(ww, hh)).pack(side='left', padx=2)
@@ -925,351 +887,280 @@ class CronometroPremium:
         container = tk.Frame(parent, bg='#1e2227')
         container.pack(fill='both', expand=True, padx=15, pady=15)
 
-        vis_lb = tk.LabelFrame(container, text=self.get_string("visibility"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Visibilidade
+        vis_lb = tk.LabelFrame(container, text="👁️ Visibilidade", font=('Segoe UI', 11, 'bold'),
                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         vis_lb.pack(fill='x', pady=10)
 
         self.var_sempre_visivel = tk.BooleanVar(value=self.config.get("sempre_visivel", True))
-        tk.Checkbutton(vis_lb, text=self.get_string("always_on_top"), variable=self.var_sempre_visivel,
+        tk.Checkbutton(vis_lb, text="Sempre visível (sempre em cima)", variable=self.var_sempre_visivel,
                       command=self.toggle_sempre_visivel_config, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').pack(anchor='w', padx=10, pady=5)
 
-        init_lb = tk.LabelFrame(container, text=self.get_string("initialization"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Inicialização
+        init_lb = tk.LabelFrame(container, text="🚀 Inicialização", font=('Segoe UI', 11, 'bold'),
                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         init_lb.pack(fill='x', pady=10)
 
         self.var_auto_iniciar = tk.BooleanVar(value=self.config.get("auto_iniciar", False))
-        tk.Checkbutton(init_lb, text=self.get_string("auto_start_stopwatch"), variable=self.var_auto_iniciar,
+        tk.Checkbutton(init_lb, text="Iniciar cronômetro automaticamente", variable=self.var_auto_iniciar,
                       command=self.toggle_auto_iniciar, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').pack(anchor='w', padx=10, pady=5)
 
-        efeitos_lb = tk.LabelFrame(container, text=self.get_string("effects"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Efeitos
+        efeitos_lb = tk.LabelFrame(container, text="✨ Efeitos", font=('Segoe UI', 11, 'bold'),
                                    fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         efeitos_lb.pack(fill='x', pady=10)
 
         self.var_animacao = tk.BooleanVar(value=self.config.get("animacao", True))
-        tk.Checkbutton(efeitos_lb, text=self.get_string("pulse_animation"), variable=self.var_animacao,
+        tk.Checkbutton(efeitos_lb, text="Animação de pulsação", variable=self.var_animacao,
                       command=self.toggle_animacao, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').pack(anchor='w', padx=10, pady=5)
 
-        atalhos_lb = tk.LabelFrame(container, text=self.get_string("shortcuts"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Atalhos
+        atalhos_lb = tk.LabelFrame(container, text="⌨️ Atalhos", font=('Segoe UI', 11, 'bold'),
                                    fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         atalhos_lb.pack(fill='x', pady=10)
 
         self.var_atalhos = tk.BooleanVar(value=self.config.get("atalhos_globais", True))
-        tk.Checkbutton(atalhos_lb, text=self.get_string("keyboard_shortcuts_active"), variable=self.var_atalhos,
+        tk.Checkbutton(atalhos_lb, text="Atalhos de teclado ativos", variable=self.var_atalhos,
                       command=self.toggle_atalhos, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').pack(anchor='w', padx=10, pady=5)
 
+        # Lista de atalhos
         atalhos_info = tk.Text(atalhos_lb, height=6, bg='#21262d', fg='#c9d1d9', bd=0)
         atalhos_info.pack(fill='x', padx=10, pady=5)
-        atalhos_info.insert('1.0', self.get_string("shortcuts_list"))
+        atalhos_info.insert('1.0', """Atalhos disponíveis:
+• ESPAÇO - Iniciar/Pausar
+• R - Resetar
+• C - Centralizar
+• S - Configurações
+• Duplo clique - Iniciar/Pausar""")
         atalhos_info.config(state='disabled')
 
+    # ### NOVO: Aba e Lógica para o Alarme de Foco ###
     def criar_aba_alarme(self, parent):
         container = tk.Frame(parent, bg='#1e2227')
         container.pack(fill='both', expand=True, padx=15, pady=15)
 
-        alarm_lb = tk.LabelFrame(container, text=self.get_string("alarm_control"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Controle do Alarme
+        alarm_lb = tk.LabelFrame(container, text="🎯 Controle do Alarme de Foco", font=('Segoe UI', 11, 'bold'),
                                  fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         alarm_lb.pack(fill='x', pady=10)
 
+        # Ativar/Desativar Alarme
         self.var_alarm_ativo = tk.BooleanVar(value=self.config.get("alarm_ativo", False))
-        chk_ativo = tk.Checkbutton(alarm_lb, text=self.get_string("enable_focus_alarm"), variable=self.var_alarm_ativo,
+        chk_ativo = tk.Checkbutton(alarm_lb, text="Ativar Alarme de Foco", variable=self.var_alarm_ativo,
                                    command=self.toggle_alarm_ativo_config, fg='#c9d1d9', bg='#1e2227',
                                    selectcolor='#1e2227', font=('Segoe UI', 10, 'bold'))
         chk_ativo.pack(anchor='w', padx=10, pady=5)
 
+        # Configurações de tempo
         time_frame = tk.Frame(alarm_lb, bg='#1e2227')
         time_frame.pack(fill='x', padx=10, pady=10)
-        
-        self.alarm_tempo_trabalho_var.set(self.config.get('alarm_tempo_trabalho', 45))
-        self.alarm_tempo_pausa_var.set(self.config.get('alarm_tempo_pausa', 5))
 
-        tk.Label(time_frame, text=self.get_string("work_time"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=5, pady=5)
+        tk.Label(time_frame, text="Tempo de Trabalho (min):", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=5, pady=5)
         self.spin_trabalho = tk.Spinbox(time_frame, from_=1, to=180, width=5,
-                                        textvariable=self.alarm_tempo_trabalho_var)
+                                        textvariable=tk.StringVar(value=self.config['alarm_tempo_trabalho']),
+                                        command=lambda: self.atualizar_config_alarme('alarm_tempo_trabalho', self.spin_trabalho.get()))
         self.spin_trabalho.grid(row=0, column=1, sticky='w', padx=5, pady=5)
 
-        tk.Label(time_frame, text=self.get_string("break_time"), fg='#c9d1d9', bg='#1e2227').grid(row=1, column=0, sticky='w', padx=5, pady=5)
+        tk.Label(time_frame, text="Tempo de Pausa (min):", fg='#c9d1d9', bg='#1e2227').grid(row=1, column=0, sticky='w', padx=5, pady=5)
         self.spin_pausa = tk.Spinbox(time_frame, from_=1, to=60, width=5,
-                                     textvariable=self.alarm_tempo_pausa_var)
+                                     textvariable=tk.StringVar(value=self.config['alarm_tempo_pausa']),
+                                     command=lambda: self.atualizar_config_alarme('alarm_tempo_pausa', self.spin_pausa.get()))
         self.spin_pausa.grid(row=1, column=1, sticky='w', padx=5, pady=5)
 
+        # Tipo de bloqueio
         bloqueio_frame = tk.Frame(alarm_lb, bg='#1e2227')
         bloqueio_frame.pack(fill='x', padx=10, pady=5)
-        tk.Label(bloqueio_frame, text=self.get_string("lock_type"), fg='#c9d1d9', bg='#1e2227').pack(side='left', padx=5)
+        tk.Label(bloqueio_frame, text="Tipo de Bloqueio na Pausa:", fg='#c9d1d9', bg='#1e2227').pack(side='left', padx=5)
         
-        self.combo_bloqueio = ttk.Combobox(bloqueio_frame, values=[self.get_string("lock_type_translucent"), self.get_string("lock_type_full")], state="readonly")
-        
-        # Mapeamento para garantir que o valor salvo corresponda ao texto exibido
-        current_lock_type_key = "lock_type_translucent" if self.config.get('alarm_tipo_bloqueio') == "Tela Cheia Translúcida" else "lock_type_full"
-        self.combo_bloqueio.set(self.get_string(current_lock_type_key))
-
+        self.combo_bloqueio = ttk.Combobox(bloqueio_frame, values=["Tela Cheia Translúcida", "Bloqueio Total"], state="readonly")
+        self.combo_bloqueio.set(self.config['alarm_tipo_bloqueio'])
         self.combo_bloqueio.pack(side='left', padx=5)
-        self.combo_bloqueio.bind("<<ComboboxSelected>>", self.on_lock_type_change)
+        self.combo_bloqueio.bind("<<ComboboxSelected>>", lambda e: self.atualizar_config_alarme('alarm_tipo_bloqueio', self.combo_bloqueio.get()))
 
-        btn_text = self.get_string("stop_focus_alarm_btn") if self.alarm_rodando else self.get_string("start_focus_alarm_btn")
+        # Botão de Iniciar/Parar
+        btn_text = "Parar Alarme de Foco" if self.alarm_rodando else "Iniciar Alarme de Foco"
         self.btn_toggle_alarme = tk.Button(alarm_lb, text=btn_text, bg='#0d6efd', fg='white', bd=0, pady=8,
                                            command=self.toggle_alarme_foco)
         self.btn_toggle_alarme.pack(fill='x', padx=10, pady=15)
-        
-    def on_lock_type_change(self, event=None):
-        selected_display_name = self.combo_bloqueio.get()
-        if selected_display_name == self.get_string("lock_type_translucent"):
-            value_to_save = "Tela Cheia Translúcida"
-        else:
-            value_to_save = "Bloqueio Total"
-        self.atualizar_config_alarme('alarm_tipo_bloqueio', value_to_save)
 
-    def on_alarm_time_change(self, *args):
-        try:
-            self.config['alarm_tempo_trabalho'] = self.alarm_tempo_trabalho_var.get()
-            self.config['alarm_tempo_pausa'] = self.alarm_tempo_pausa_var.get()
-            self.salvar_configuracoes()
-        except tk.TclError:
-            pass
-        except Exception as e:
-            print(f"Erro ao salvar tempo do alarme: {e}")
-            
     def atualizar_config_alarme(self, chave, valor):
-        self.config[chave] = valor
-        self.salvar_configuracoes()
+        """Atualiza uma configuração do alarme e salva."""
+        try:
+            # Converte para inteiro se for tempo
+            if 'tempo' in chave:
+                valor = int(valor)
+            self.config[chave] = valor
+            self.salvar_configuracoes()
+            print(f"Configuração do alarme '{chave}' atualizada para '{valor}'")
+        except ValueError:
+            print(f"Valor inválido para {chave}: {valor}")
 
     def toggle_alarm_ativo_config(self):
+        """Ativa/desativa a funcionalidade do alarme a partir da UI de config."""
         self.config['alarm_ativo'] = self.var_alarm_ativo.get()
         self.salvar_configuracoes()
         if not self.config['alarm_ativo'] and self.alarm_rodando:
-            self.toggle_alarme_foco()
-        messagebox.showinfo(self.get_string("alarm_focus_title"), self.get_string("alarm_disabled_warning_msg" if not self.config['alarm_ativo'] else "Alarme de foco foi ativado."))
+            self.toggle_alarme_foco() # Para o alarme se ele estiver rodando e for desativado
+        messagebox.showinfo("Alarme de Foco", f"Alarme de foco foi {'ativado' if self.config['alarm_ativo'] else 'desativado'}.")
+
 
     def toggle_alarme_foco(self):
+        """Inicia ou para o ciclo do alarme de foco."""
         if not self.config['alarm_ativo']:
-            messagebox.showwarning(self.get_string("alarm_disabled_warning_title"), self.get_string("alarm_disabled_warning_msg"))
+            messagebox.showwarning("Alarme Desativado", "O alarme de foco está desativado. Ative-o na aba 'Alarme/Foco' das configurações.")
             return
 
         if self.alarm_rodando:
+            # Para o alarme
             self.alarm_rodando = False
             if self.alarm_thread and self.alarm_thread.is_alive():
                 print("Sinalizando para a thread do alarme parar...")
             if self.is_break_time:
                 self.fechar_tela_bloqueio()
-            if hasattr(self, 'btn_toggle_alarme') and self.btn_toggle_alarme.winfo_exists():
-                self.btn_toggle_alarme.config(text=self.get_string("start_focus_alarm_btn"))
-            messagebox.showinfo(self.get_string("alarm_stopped_title"), self.get_string("alarm_stopped_message"))
+            self.btn_toggle_alarme.config(text="Iniciar Alarme de Foco")
+            messagebox.showinfo("Alarme de Foco", "O alarme de foco foi parado.")
         else:
+            # Inicia o alarme
             self.alarm_rodando = True
             self.alarm_thread = threading.Thread(target=self.gerenciar_alarme, daemon=True)
             self.alarm_thread.start()
-            if hasattr(self, 'btn_toggle_alarme') and self.btn_toggle_alarme.winfo_exists():
-                self.btn_toggle_alarme.config(text=self.get_string("stop_focus_alarm_btn"))
-            messagebox.showinfo(self.get_string("alarm_focus_title"), self.get_string("alarm_started_message"))
-
-    def play_sound_async(self, sound_file):
-        if not os.path.exists(sound_file):
-            print(f"Arquivo de som não encontrado: {sound_file}")
-            return
-        
-        def _play():
-            try:
-                playsound(sound_file)
-            except Exception as e:
-                print(f"Erro ao tocar o som '{sound_file}': {e}")
-
-        threading.Thread(target=_play, daemon=True).start()
+            self.btn_toggle_alarme.config(text="Parar Alarme de Foco")
+            messagebox.showinfo("Alarme de Foco", "O alarme de foco foi iniciado.")
 
     def gerenciar_alarme(self):
+        """Thread que gerencia os ciclos de trabalho e pausa."""
         print("Thread do alarme iniciada.")
-        
-        self.root.after(0, self.resetar)
-        self.root.after(100, self.toggle)
-
         while self.alarm_rodando:
+            # --- FASE DE TRABALHO ---
             self.is_break_time = False
             tempo_trabalho_segundos = self.config['alarm_tempo_trabalho'] * 60
             print(f"Iniciando período de trabalho de {self.config['alarm_tempo_trabalho']} minutos.")
             
+            # Delega o reset e início para a thread principal da UI
+            self.root.after(0, self.resetar)
+            self.root.after(100, self.toggle) # Delay para garantir que o reset ocorreu
+
+            # Espera o tempo de trabalho passar (verificando a cada segundo se o alarme foi parado)
             for _ in range(tempo_trabalho_segundos):
                 if not self.alarm_rodando:
                     print("Alarme interrompido durante o trabalho.")
-                    if self.rodando: self.root.after(0, self.toggle)
                     return
                 time.sleep(1)
 
-            if not self.alarm_rodando: break
+            # --- FASE DE PAUSA ---
+            if not self.alarm_rodando: return # Verifica novamente antes de iniciar a pausa
 
             self.is_break_time = True
-            if self.rodando: self.root.after(0, self.toggle)
-            tempo_pausa_segundos = self.config['alarm_tempo_pausa']
+            tempo_pausa_segundos = self.config['alarm_tempo_pausa'] * 60
             print(f"Iniciando pausa de {self.config['alarm_tempo_pausa']} minutos.")
-            
-            self.root.after(0, self.play_sound_async, 'lock.mp3')
+
+            # Mostra a tela de bloqueio na thread principal
             self.root.after(0, self.mostrar_tela_bloqueio)
             
-            for i in range(tempo_pausa_segundos * 60, -1, -1):
+            # Espera o tempo de pausa passar
+            for _ in range(tempo_pausa_segundos):
                 if not self.alarm_rodando:
                     print("Alarme interrompido durante a pausa.")
-                    self.root.after(0, self.fechar_tela_bloqueio)
+                    self.root.after(0, self.fechar_tela_bloqueio) # Garante que a tela de bloqueio seja fechada
                     return
-                
-                mins, secs = divmod(i, 60)
-                tempo_restante_formatado = f"{mins:02d}:{secs:02d}"
-                self.root.after(0, self.atualizar_countdown_bloqueio, tempo_restante_formatado)
                 time.sleep(1)
             
+            # Fecha a tela de bloqueio na thread principal
             self.root.after(0, self.fechar_tela_bloqueio)
-            if not self.alarm_rodando: break
+            self.is_break_time = False
             
-            self.root.after(0, self.play_sound_async, 'unlock.mp3')
-            self.root.after(0, self.mostrar_tela_transicao)
-            time.sleep(3)
-            self.root.after(0, self.fechar_tela_transicao)
-            
-            if not self.alarm_rodando: break
+            print("Ciclo de trabalho/pausa concluído. Reiniciando.")
 
-            self.root.after(0, self.resetar)
-            self.root.after(100, self.toggle)
-            
-            print("Ciclo de trabalho/pausa concluído. Reiniciando automaticamente...")
-        
         print("Fim do ciclo do alarme.")
 
     def mostrar_tela_bloqueio(self):
-        if self.freeze_windows: return
-        self.countdown_labels.clear()
+        """Cria e exibe uma janela de tela cheia para a pausa."""
+        if self.freeze_window is not None and self.freeze_window.winfo_exists():
+            return # Janela já existe
         
-        try:
-            monitores = screeninfo.get_monitors()
-        except screeninfo.common.ScreenInfoError:
-            monitores = [type('obj', (object,), {'width': self.root.winfo_screenwidth(), 'height': self.root.winfo_screenheight(), 'x': 0, 'y': 0})()]
-
-        for monitor in monitores:
-            freeze_window = tk.Toplevel(self.root)
-            freeze_window.title(self.get_string("break_screen_title"))
-            freeze_window.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
-            freeze_window.overrideredirect(True)
-            freeze_window.attributes('-topmost', True)
-            
-            tipo_bloqueio = self.config['alarm_tipo_bloqueio']
-            bg_color = '#1a1a1a' if tipo_bloqueio == "Bloqueio Total" else 'black'
-            alpha = 1.0 if tipo_bloqueio == "Bloqueio Total" else 0.8
-            
-            freeze_window.configure(bg=bg_color)
-            freeze_window.wm_attributes('-alpha', alpha)
-            
-            frame = tk.Frame(freeze_window, bg=bg_color)
-            frame.pack(expand=True)
-
-            msg = self.get_string("break_screen_message").format(minutes=self.config['alarm_tempo_pausa'])
-            tk.Label(frame, text=msg, font=("Segoe UI", 48, "bold"), fg="white", bg=bg_color).pack(pady=(20, 10))
-
-            countdown_label = tk.Label(frame, text="", font=("Segoe UI", 72, "bold"), fg="#58a6ff", bg=bg_color)
-            countdown_label.pack(pady=(10, 20))
-            
-            self.countdown_labels.append(countdown_label)
-            self.freeze_windows.append(freeze_window)
+        self.freeze_window = tk.Toplevel(self.root)
+        self.freeze_window.title("Pausa")
         
-        if self.freeze_windows: self.freeze_windows[0].grab_set()
+        largura, altura = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.freeze_window.geometry(f"{largura}x{altura}+0+0")
+        
+        self.freeze_window.overrideredirect(True)
+        self.freeze_window.attributes('-topmost', True)
+        self.freeze_window.grab_set() # Captura todo o input
+        
+        tipo_bloqueio = self.config['alarm_tipo_bloqueio']
+        if tipo_bloqueio == "Tela Cheia Translúcida":
+            self.freeze_window.configure(bg='black')
+            self.freeze_window.wm_attributes('-alpha', 0.8)
+        else: # Bloqueio Total
+            self.freeze_window.configure(bg='#1a1a1a')
+            self.freeze_window.wm_attributes('-alpha', 1.0)
+            
+        msg = f"É hora da pausa!\nRelaxe por {self.config['alarm_tempo_pausa']} minutos."
+        tk.Label(self.freeze_window, text=msg, font=("Segoe UI", 48, "bold"), fg="white", 
+                 bg=self.freeze_window.cget('bg')).pack(expand=True)
 
     def fechar_tela_bloqueio(self):
-        for window in self.freeze_windows:
-            if window.winfo_exists():
-                window.grab_release()
-                window.destroy()
-        self.freeze_windows.clear()
-        self.countdown_labels.clear()
+        """Fecha a janela de bloqueio."""
+        if self.freeze_window is not None and self.freeze_window.winfo_exists():
+            self.freeze_window.grab_release()
+            self.freeze_window.destroy()
+            self.freeze_window = None
         self.is_break_time = False
-
-    def atualizar_countdown_bloqueio(self, texto):
-        for label in self.countdown_labels:
-            if label.winfo_exists():
-                label.config(text=texto)
-
-    def mostrar_tela_transicao(self):
-        if self.transition_windows: return
-        
-        try:
-            monitores = screeninfo.get_monitors()
-        except screeninfo.common.ScreenInfoError:
-            monitores = [type('obj', (object,), {'width': self.root.winfo_screenwidth(), 'height': self.root.winfo_screenheight(), 'x': 0, 'y': 0})()]
-
-        for monitor in monitores:
-            trans_window = tk.Toplevel(self.root)
-            trans_window.geometry(f"{monitor.width}x{monitor.height}+{monitor.x}+{monitor.y}")
-            trans_window.overrideredirect(True)
-            trans_window.attributes('-topmost', True)
-            bg_color = '#0c2e15'
-            trans_window.configure(bg=bg_color)
-            trans_window.wm_attributes('-alpha', 0.9)
-            
-            tk.Label(trans_window, text=self.get_string("transition_screen_message"), font=("Segoe UI", 52, "bold"), fg="white", bg=bg_color).pack(expand=True)
-            
-            self.transition_windows.append(trans_window)
-
-    def fechar_tela_transicao(self):
-        for window in self.transition_windows:
-            if window.winfo_exists():
-                window.destroy()
-        self.transition_windows.clear()
 
     def criar_aba_avancado(self, parent):
         container = tk.Frame(parent, bg='#1e2227')
         container.pack(fill='both', expand=True, padx=15, pady=15)
 
-        # Seção de Idioma
-        lang_lb = tk.LabelFrame(container, text=self.get_string("language"), font=('Segoe UI', 11, 'bold'),
-                                fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
-        lang_lb.pack(fill='x', pady=10)
-        
-        self.lang_combo = ttk.Combobox(lang_lb, values=["Português", "English"], state="readonly")
-        current_lang_display = "English" if self.config.get("language") == "en" else "Português"
-        self.lang_combo.set(current_lang_display)
-        self.lang_combo.pack(pady=10, padx=10)
-        self.lang_combo.bind("<<ComboboxSelected>>", self.change_language)
-
-        perf_lb = tk.LabelFrame(container, text=self.get_string("performance"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Performance
+        perf_lb = tk.LabelFrame(container, text="⚡ Performance", font=('Segoe UI', 11, 'bold'),
                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         perf_lb.pack(fill='x', pady=10)
 
-        tk.Label(perf_lb, text=self.get_string("update_interval"), fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
+        tk.Label(perf_lb, text="Intervalo de atualização (ms):", fg='#c9d1d9', bg='#1e2227').grid(row=0, column=0, sticky='w', padx=10, pady=5)
         self.scl_intervalo = ttk.Scale(perf_lb, from_=50, to=1000, value=self.config.get("intervalo_atualizacao", 100),
                                        orient='horizontal', command=lambda v: self.mudar_intervalo(int(float(v))))
         self.scl_intervalo.grid(row=0, column=1, sticky='ew', padx=10, pady=5)
 
-        dados_lb = tk.LabelFrame(container, text=self.get_string("data"), font=('Segoe UI', 11, 'bold'),
+        # Seção de Dados
+        dados_lb = tk.LabelFrame(container, text="💾 Dados", font=('Segoe UI', 11, 'bold'),
                                  fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         dados_lb.pack(fill='x', pady=10)
 
         self.var_auto_salvar = tk.BooleanVar(value=self.config.get("auto_salvar", True))
-        tk.Checkbutton(dados_lb, text=self.get_string("autosave_settings"), variable=self.var_auto_salvar,
+        tk.Checkbutton(dados_lb, text="Salvar configurações automaticamente", variable=self.var_auto_salvar,
                       command=self.toggle_auto_salvar, fg='#c9d1d9', bg='#1e2227',
                       selectcolor='#1e2227').pack(anchor='w', padx=10, pady=5)
 
+        # Botões de ação
         btn_frame = tk.Frame(dados_lb, bg='#1e2227')
         btn_frame.pack(fill='x', padx=10, pady=10)
 
-        tk.Button(btn_frame, text=self.get_string("save_now"), bg='#238636', fg='white', bd=0,
+        tk.Button(btn_frame, text="💾 Salvar Agora", bg='#238636', fg='white', bd=0,
                   command=self.salvar_configuracoes).pack(side='left', padx=5)
-        tk.Button(btn_frame, text=self.get_string("reset_settings"), bg='#dc3545', fg='white', bd=0,
+        tk.Button(btn_frame, text="🔄 Resetar Config", bg='#dc3545', fg='white', bd=0,
                   command=self.resetar_configuracoes).pack(side='left', padx=5)
-        tk.Button(btn_frame, text=self.get_string("open_folder"), bg='#0d6efd', fg='white', bd=0,
+        tk.Button(btn_frame, text="📂 Abrir Pasta", bg='#0d6efd', fg='white', bd=0,
                   command=self.abrir_pasta_config).pack(side='left', padx=5)
 
-        info_lb = tk.LabelFrame(container, text=self.get_string("info"), font=('Segoe UI', 11, 'bold'),
+        # Informações do sistema
+        info_lb = tk.LabelFrame(container, text="ℹ️ Informações", font=('Segoe UI', 11, 'bold'),
                                 fg='#c9d1d9', bg='#1e2227', relief='groove', bd=1)
         info_lb.pack(fill='x', pady=10)
 
-        info_text_content = (
-            f"{self.get_string('info_system')}: {platform.system()} {platform.release()}\n"
-            f"{self.get_string('info_python_version')}: {sys.version.split()[0]}\n"
-            f"{self.get_string('info_config_file')}: {os.path.abspath(self.config_file)}\n"
-            "Cronômetro Premium v2.5 (i18n)"
-        )
         info_text = tk.Text(info_lb, height=4, bg='#21262d', fg='#c9d1d9', bd=0)
         info_text.pack(fill='x', padx=10, pady=5)
-        info_text.insert('1.0', info_text_content)
+        info_text.insert('1.0', f"""Sistema: {platform.system()} {platform.release()}
+Versão Python: {sys.version.split()[0]}
+Arquivo de config: {os.path.abspath(self.config_file)}
+Cronômetro Premium v2.1 (com Alarme)""")
         info_text.config(state='disabled')
 
+    # Métodos para as novas funcionalidades
     def mudar_formato(self):
         self.config["formato_tempo"] = self.formato_var.get()
         self.salvar_configuracoes()
@@ -1303,7 +1194,7 @@ class CronometroPremium:
         self.salvar_configuracoes()
 
     def resetar_configuracoes(self):
-        if messagebox.askyesno(self.get_string("confirm_reset_title"), self.get_string("confirm_reset_message")):
+        if messagebox.askyesno("Confirmar", "Resetar todas as configurações?"):
             if os.path.exists(self.config_file):
                 os.remove(self.config_file)
             self.root.quit()
@@ -1312,23 +1203,26 @@ class CronometroPremium:
         pasta = os.path.dirname(os.path.abspath(self.config_file))
         if platform.system() == "Windows":
             os.startfile(pasta)
-        elif platform.system() == "Darwin":
+        elif platform.system() == "Darwin":  # macOS
             subprocess.run(["open", pasta])
-        else:
+        else:  # Linux
             subprocess.run(["xdg-open", pasta])
 
+    # Métodos para as novas funcionalidades
     def atualizar_visual_completo(self):
+        """Força atualização completa da interface visual"""
         self.aplicar_fundo()
         self.setup_ui()
         self.aplicar_forma_personalizada()
 
+    # Métodos existentes adaptados
     def escolher_cor(self, chave):
         cor = colorchooser.askcolor(color=self.config[chave])[1]
         if cor:
             self.config[chave] = cor
             if chave == "cor_fundo_personalizada":
-                self.aplicar_fundo()
-                self.aplicar_forma_personalizada()
+                self.aplicar_fundo() # Atualiza o bg da root e do canvas
+                self.aplicar_forma_personalizada() # Redesenha a forma com a nova cor
             elif chave in ["cor_preenchimento", "cor_borda"]:
                 self.redesenhar_texto()
             elif chave in ["cor_gradiente_inicio", "cor_gradiente_fim"]:
@@ -1343,8 +1237,8 @@ class CronometroPremium:
         else:
             self.config["tipo_fundo"] = "cor"
             self.trans_frame.grid_forget()
-        self.aplicar_fundo()
-        self.setup_ui()
+        self.aplicar_fundo() # Atualiza o bg da root e do canvas
+        self.setup_ui() # Recria o canvas com o novo bg e chama aplicar_forma_personalizada
         self.salvar_configuracoes()
 
     def mudar_trans(self, v):
@@ -1406,7 +1300,7 @@ class CronometroPremium:
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
         x = (screen_width - self.root.winfo_width()) // 2
-        y = 100
+        y = 100  # Mantém no topo
         self.root.geometry(f"+{x}+{y}")
         self.salvar_configuracoes()
 
@@ -1427,18 +1321,18 @@ class CronometroPremium:
             elif k == 'r': self.resetar()
             elif k == 'c': self.centralizar()
             elif k == 's': 
+                print("Tecla S pressionada - abrindo configurações")
                 self.abrir_configuracoes()
-            elif k == 'd':
+            elif k == 'd':  # Debug
                 self.debug_janela_config()
         except Exception as e:
             print(f"Erro ao processar tecla: {e}")
 
     def fechar_app(self):
+        # ### ALTERADO: Garante que a thread do alarme pare ###
         self.alarm_rodando = False
         self.topmost_thread_running = False
         self.salvar_configuracoes()
-        self.fechar_tela_bloqueio()
-        self.fechar_tela_transicao()
         self.root.quit()
 
     def atualizar_display(self, txt):
@@ -1459,7 +1353,9 @@ class CronometroPremium:
                 break
 
     def iniciar_threads(self):
+        # Thread para atualizar o cronômetro
         threading.Thread(target=self.atualizar_cronometro, daemon=True).start()
+        # Thread para manter sempre visível
         threading.Thread(target=self.manter_sempre_visivel, daemon=True).start()
 
     def executar(self):
@@ -1470,12 +1366,13 @@ class CronometroPremium:
 
     def mudar_forma(self):
         self.config["forma_caixa"] = self.forma_var.get()
+        # print(f"Mudar forma para: {self.config['forma_caixa']}") # Debug print
         if hasattr(self, 'borda_frame'):
             if self.config["forma_caixa"] == "retangulo":
                 self.borda_frame.grid(row=3, column=0, columnspan=3, sticky='ew', padx=10, pady=5)
             else:
                 self.borda_frame.grid_forget()
-        self.aplicar_forma_personalizada()
+        self.aplicar_forma_personalizada() # Chama para redesenhar a forma
         self.salvar_configuracoes()
 
     def toggle_gradiente(self):

@@ -8,8 +8,8 @@
     "espessura_borda": 1.3953488372093024,
     "tipo_fundo": "cor",
     "transparencia": 0.95,
-    "pos_x": 4,
-    "pos_y": 726,
+    "pos_x": 9,
+    "pos_y": 727,
     "espacamento_letras": 0.0,
     "sempre_visivel": true,
     "auto_iniciar": false,
@@ -19,7 +19,7 @@
     "tema": "escuro",
     "animacao": false,
     "minimizar_tray": false,
-    "atalhos_globais": true,
+    "atalhos_globais": false,
     "auto_salvar": true,
     "intervalo_atualizacao": 50,
     "cor_fundo_solido": "#1a1a1a",
@@ -30,5 +30,10 @@
     "cor_fundo_personalizada": "#a67800",
     "gradiente_ativo": false,
     "cor_gradiente_inicio": "#1a1a1a",
-    "cor_gradiente_fim": "#3a3a3a"
+    "cor_gradiente_fim": "#3a3a3a",
+    "alarm_ativo": true,
+    "alarm_tempo_trabalho": 1,
+    "alarm_tempo_pausa": 1,
+    "alarm_tipo_bloqueio": "Tela Cheia Transl\u00facida",
+    "language": "en"
 }
